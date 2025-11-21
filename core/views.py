@@ -69,6 +69,8 @@ from rest_framework import status
 import unicodedata
 import re
 
+
+
 def _norm(s: str) -> str:
     if not s:
         return ""
@@ -1495,7 +1497,10 @@ def generar_consolidado_interno(consulta_id, tipo_id, usuario, request=None):
 
     # ---------- Carga de objetos base ----------
     consulta = Consulta.objects.get(id=consulta_id)
-    tipo = TipoConsolidado.objects.get(id=tipo_id)
+    tipo, _ = TipoConsolidado.objects.get_or_create(
+        id=tipo_id,
+        defaults={"nombre": f"Tipo {tipo_id}"}
+    )
     candidato = consulta.candidato
 
     # ---------- Busca/crea consolidado y asegura QR ----------
@@ -1871,6 +1876,17 @@ def descargar_consolidado_categoria(request, consulta_id, tipo_id):
             tipo_id=tipo_id
         ).order_by("-fecha_creacion").first()
 
+        # Si no existe consolidado o no tiene archivo, intentar generarlo on-demand
+        if not consolidado or not getattr(consolidado, "archivo", None) or not getattr(consolidado.archivo, "name", ""):
+            try:
+                usuario = request.user if hasattr(request, "user") and request.user and request.user.is_authenticated else None
+                from .views import generar_consolidado_interno
+                consolidado = generar_consolidado_interno(consulta_id, tipo_id, usuario, request=request)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return Response({"error": f"Error al generar consolidado: {e}"}, status=500)
+
         if not consolidado or not consolidado.archivo:
             return Response({"error": "No se encontró archivo PDF"}, status=404)
 
@@ -1878,7 +1894,6 @@ def descargar_consolidado_categoria(request, consulta_id, tipo_id):
         if not os.path.exists(file_path):
             return Response({"error": "El archivo PDF no está disponible en el servidor"}, status=404)
 
-        # Usa el nombre real del archivo en el storage
         original_name = os.path.basename(consolidado.archivo.name)
 
         with open(file_path, "rb") as pdf:
