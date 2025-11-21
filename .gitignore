@@ -1,0 +1,37 @@
+# Entorno virtual
+venv/
+.venv/
+env/
+# Archivos de entorno
+.env
+db.sqlite3
+
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos temporales y logs
+*.log
+*.swp
+*.swo
+
+# Caché de pruebas y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Archivos del sistema y del editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Migraciones (opcional, solo si quieres ignorarlas antes de generar las reales)
+# core/migrations/
+# Si decides ignorar las migraciones, asegúrate de eliminar el archivo __init__.py del .gitignore
+
+# Archivos generados por bots o consultas si son temporales
+resultados/
+media/

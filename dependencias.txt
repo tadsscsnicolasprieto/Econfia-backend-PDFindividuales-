@@ -1,0 +1,40 @@
+# dependencias.txt
+# Archivo informativo de dependencias y su propósito en el proyecto Econfia Backend
+
+# --- Dependencias principales ---
+Django==5.2.4           # Framework principal para el backend y API REST
+celery                  # Tareas asíncronas y workers
+PyPDF2                  # Manipulación y unión de archivos PDF
+Pillow                  # Procesamiento de imágenes (pantallazos, conversión a PDF)
+WeasyPrint              # Generación de PDFs a partir de HTML (reportes)
+djangorestframework     # API REST y autenticación
+python-dotenv           # Carga de variables de entorno desde .env
+
+# --- Dependencias para bots y scraping ---
+playwright              # Automatización de navegadores para bots
+requests                # Peticiones HTTP simples
+qrcode                  # Generación de códigos QR en reportes
+
+# --- Dependencias para gráficos y visualización ---
+matplotlib              # Gráficos de riesgo y burbuja
+numpy                   # Cálculos numéricos para gráficos
+
+# --- Dependencias de ejecución y desarrollo ---
+gunicorn                # Servidor WSGI para producción
+psycopg2                # Conector para PostgreSQL
+
+# --- Dependencias para tareas y workers ---
+redis                   # Broker para Celery
+kombu                   # Comunicación entre workers Celery
+
+# --- Ejecución de servicios ---
+# Activar entorno virtual:
+#   Windows: backend/venv/Scripts/Activate.ps1
+#   Linux/Mac: source backend/venv/bin/activate
+# Ejecutar backend Django:
+#   python manage.py runserver
+# Ejecutar worker Celery:
+#   celery -A backend worker --pool=solo --loglevel=info
+
+# --- Otros ---
+# Puedes agregar aquí dependencias adicionales y su propósito.

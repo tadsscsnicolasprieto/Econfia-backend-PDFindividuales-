@@ -1,0 +1,128 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Econfia reporte</title>
+
+<!-- Fuente -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style_resumen.css' %}">
+
+</head>
+<body>
+  <!-- Página 1 -->
+<section class="page">
+    <header class="cabecera" style="background:{{ color_riesgo }}">
+      <div class="cabecera-izq">
+        <img src="{% static 'img/logo.jpg' %}" alt="Logo">
+        <span class="nombre">ECONFIA</span>
+      </div>
+      <div class="cabecera-der">
+        <h2>Econfia</h2>
+        <p>Una producto de grupo soluciones</p>
+        <p>Calle 44C #55-39 Of. 101</p>
+        <p>+57 (601) 828 1799</p>
+      </div>
+    </header>
+
+<div class="contenido">
+  <div class="card">
+    <!-- Riesgo -->
+    <div class="riesgo"  >
+      <div class="circle"style="border: 10px solid {{ color_riesgo }}; color: {{ color_riesgo }};">{{ riesgo.riesgo }} </div>
+      <p>Riesgo {{ riesgo.categoria }} </p>
+    </div>
+
+    <!-- Perfil -->
+    <div class="perfil" style="border: 10px solid {{ color_riesgo }};">
+      {% if riesgo.categoria == "Bajo" %}
+        <img src="{% static 'img/placeholder_verde.png' %}" alt="Foto candidato">
+      {% elif riesgo.categoria == "Alto" %}
+        <img src="{% static 'img/placeholder_rojo.png' %}" alt="Foto candidato">
+      {% elif riesgo.categoria == "Medio" %}
+        <img src="{% static 'img/placeholder_amarillo.png' %}" alt="Foto candidato">
+      {% else %}
+        <img src="{% static 'img/placeholder_gris.png' %}" alt="Foto candidato">
+      {% endif %}
+    </div>
+
+
+    <!-- Datos biográficos -->
+    <div class="datos">
+      <h3>{{ candidato.nombre }} {{ candidato.apellido }}</h3>
+      <p class="dato"><strong>Sexo:</strong> {{ candidato.sexo }}</p>
+      <p class="dato"><strong>Fecha de nacimiento:</strong> {{ candidato.fecha_nacimiento }}</p>
+      <p class="dato"><strong>N° Documento:</strong> {{ candidato.cedula }}</p>
+      <!-- Si tienes estado civil en el JSON, reemplázalo, si no puedes omitirlo o dejar un valor por defecto -->
+    </div>
+  </div>
+</div>
+
+
+    <!-- Nuevo bloque de estadísticas -->
+<div class="estadisticas holograma" style="--riesgo-color: {{ color_riesgo }};">
+  <h2>Estadísticas del candidato</h2>
+  <div class="graficos">
+    <img id="mapa" src="data:image/png;base64,{{ mapa_riesgo }}" alt="Mapa de calor">
+    <img id="bubble" src="data:image/png;base64,{{ bubble_chart }}" alt="Mapa de burbuja">
+  </div>
+</div>
+
+
+
+  </section>
+
+  {% for resultado in resultados %}
+    {% if forloop.first %}<section class="page"><div class="resultados-grid">{% endif %}
+
+      <div class="resultado-card">
+        <h3>{{ resultado.fuente }}</h3>
+        <p><strong>Tipo:</strong> {{ resultado.tipo_fuente }}</p>
+        <p><strong>ID:</strong> {{ resultado.id }}</p>
+        <p><strong>Mensaje:</strong> {{ resultado.mensaje }}</p>
+      </div>
+
+    {% if forloop.counter|divisibleby:6 and not forloop.last %}
+        </div></section><section class="page"><div class="resultados-grid">
+    {% elif forloop.last %}
+        </div></section>
+    {% endif %}
+  {% endfor %}
+
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-col">
+        <img src="{{ qr_url }}" alt="QR Reporte" style="width:120px; height:120px;">
+      </div>
+
+    <div class="footer-col">
+      <p><strong>Fecha de generación:</strong> {{ fecha_generacion|date:"d/m/Y H:i" }}</p>
+      {% if fecha_actualizacion %}
+        <p><strong>Última actualización:</strong> {{ fecha_actualizacion|date:"d/m/Y H:i" }}</p>
+      {% endif %}
+      <p><strong>Tipo de reporte:</strong> {{ tipo_reporte }}</p>
+            <p><strong>ID Consulta:</strong> E-C{{ consulta_id }}</p>
+      <p><strong>ID PDF:</strong> E-RP{{ consolidado_id }}</p>
+    </div>
+
+
+      <div class="footer-col">
+        <p><strong>Dirección IP:</strong> {{ ip_generacion }}</p>
+        <p><strong>Usuario:</strong> {{ usuario }}</p>
+      </div>
+    </div>
+
+    <div class="footer-legal">
+      <p>
+        Aviso Legal: Los resultados presentados en este informe son obtenidos a partir de fuentes públicas y externas. 
+        Econfia no se hace responsable de la veracidad, actualidad ni exactitud de dicha información. 
+        El uso e interpretación de este reporte es responsabilidad exclusiva del usuario.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

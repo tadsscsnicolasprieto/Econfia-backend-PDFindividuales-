@@ -1,0 +1,319 @@
+  /* A4: 210×297 mm */
+  @page { size: A4; margin: 0; }
+  html, body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+    @page {
+    @bottom-center {
+        content: element(footer);
+    }
+    }
+  .page{
+    width: 210mm;
+    height: 297mm;
+background: #073333;
+background: linear-gradient(180deg,rgb(2, 1, 21) 0%, rgb(1, 26, 49) 50%, rgba(5, 2, 31, 1) 100%);
+    page-break-after: always;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+     padding: 20px;
+
+  }
+  
+  .cabecera{
+    width: 170mm;
+    height:40mm;
+    background: #1484ceff;
+    border-radius: 20px;
+    display:flex;
+    flex-direction: row;
+    align-items:center;
+    justify-content:space-between;
+    padding-left: 10mm;
+    padding-right: 10mm;
+    color: white;
+  }
+
+  .cabecera-izq{
+    width: 70mm;
+    height: 30mm;
+    display: flex;
+    align-items: center;
+    justify-content: start;
+  }
+
+  .cabecera-izq img{
+    width: 30mm;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 100%;
+    background: #ffffff;
+  }
+
+  .cabecera-izq span{
+    font-size: 25px;
+    font-weight: 600;
+    margin-left: 5mm;
+  }
+
+  .cabecera-der{
+    width: 70mm;
+    height: 30mm;
+    line-height: 1.5;
+    text-align: right;
+    font-size: 12px;
+  }
+
+  .cabecera-der h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .cabecera-der p {
+    margin: 0;
+  }
+
+  /* ---- Contenido central ---- */
+  .contenido {
+    width: 190mm; 
+    height: 70mm;
+    display: flex;
+    justify-content: center;
+    margin-top:10mm;
+  }
+
+  /* Tarjeta */
+  .card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width:100%;
+  }
+
+  /* --- Riesgo --- */
+  .riesgo {
+    display: flex;
+    width:50mm;
+    flex-direction: column;
+    align-items: center;
+    font-size: 14px;
+    color: #dedede;
+  }
+
+  .circle {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    border: 10px solid #2196f3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 22px;
+    font-weight: bold;
+    color: #2196f3;
+  }
+
+  /* --- Imagen + Estado --- */
+  .perfil {
+    position: relative;
+    text-align: center;
+    width: 55mm;  
+    height: 55mm;  
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 5px solid #0bb2e0ff;
+  }
+
+  .perfil img {
+    width: 100%;    
+    height: 100%;   
+    object-fit: cover; 
+    border-radius: 50%;
+  }
+
+.estado {
+    position: absolute;
+    top: -15px;
+    right: -10px;
+    color: white;
+    padding: 10px 16px;         /* más grande */
+    border-radius: 12px;
+    font-size: 16px;            /* más grande */
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4); 
+    z-index: 999; /* sombra más pronunciada */
+}
+
+
+  /* --- Datos --- */
+  .datos {
+    font-size: 14px;
+    color: #dedede;
+    line-height: 1;
+    text-align: end;
+    }
+
+  .datos h3 {
+    font-size: 16px;
+    color: #eaeaea;
+  }
+
+  .dato {
+    margin: 3px 0;
+  }
+
+  /* ---- Nuevo contenedor estadísticas ---- */
+    .estadisticas {
+    width: 190mm; 
+    height: 90mm;
+    color: white;
+    margin-top: 10mm;
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .estadisticas h2 {
+    text-align: center;
+    font-size: 18px;
+    margin: 0 0 5px 0;
+    color: #ffffff;
+  }
+
+  .graficos {
+    display: flex;
+    flex-direction: row;
+    width: 170mm;
+  }
+  #mapa{
+    width: 80mm;
+  }
+  #bubble{
+    width: 65mm; 
+    margin-left: 100mm;
+  }
+   .footer {
+    position: fixed;
+    width: 100%;
+    background: #f0f0f0;
+    margin-top: auto;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    font-size: 11px;
+    color: #333;
+    border-top: 2px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    bottom: 0;
+
+  }
+
+  .footer-content {
+    display: flex;
+    justify-content: space-between; /* columnas separadas */
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;    
+    min-width: 0;
+  }
+
+  .footer-col img {
+    width: 5mm;
+    height: 5mm;
+    object-fit: contain;
+  }
+
+  .footer-col p, .footer-col span {
+    margin: 0;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .footer-legal {
+    font-size: 9px;
+    color: #666;
+    text-align: justify;
+    margin-top: 6px;
+    border-top: 1px dashed #aaa;
+    padding-top: 4px;
+    width: 100%;
+  }
+
+.resultados-grid {
+  width: 210mm;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap:10px;
+}
+
+.resultado-card {
+  width: 170mm;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+    background: linear-gradient(
+    135deg,
+    rgba(20, 20, 40, 0.9),
+    rgba(30, 30, 60, 0.8)
+  );
+
+  /* Borde neon */
+  border: 2px solid rgba(0, 106, 255, 0.7);
+
+  /* Glow simulando neon */
+  box-shadow:
+    0 0 8px rgba(0, 247, 255, 0.7),
+    0 0 16px rgba(0, 166, 255, 0.5);
+}
+
+.resultado-card h3 {
+  font-size: 13px;
+  margin: 0 0 5px 0;
+  color: #004080;
+}
+
+.resultado-card p {
+  margin: 2px 0;
+  line-height: 1.3;
+  color: #ddd;
+}
+
+  .holograma {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.02)
+  );
+  border: 2px solid var(--riesgo-color);
+  border-radius: 15px;
+  padding: 20px;
+  color: #fff;
+  box-shadow: 0 0 15px var(--riesgo-color), 0 0 30px rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.holograma h2 {
+  text-shadow: 0 0 8px var(--riesgo-color);
+  font-weight: 600;
+}

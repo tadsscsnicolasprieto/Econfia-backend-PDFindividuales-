@@ -1,0 +1,100 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Página Azul A4</title>
+
+<!-- Fuente -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+</head>
+<body>
+  <section class="page">
+    <header class="cabecera" style="background:{{ color_riesgo }}">
+      <div class="cabecera-izq">
+        <img src="{% static 'img/logo.jpg' %}" alt="Logo">
+        <span class="nombre">ECONFIA</span>
+      </div>
+      <div class="cabecera-der">
+        <h2>Econfia</h2>
+        <p>Una producto de grupo soluciones</p>
+        <p>Calle 44C #55-39 Of. 101</p>
+        <p>+57 (601) 828 1799</p>
+      </div>
+    </header>
+
+<div class="contenido">
+  <div class="card">
+    <!-- Riesgo -->
+    <div class="riesgo"  >
+      <div class="circle"style="border: 10px solid {{ color_riesgo }}; color: {{ color_riesgo }};">{{ riesgo.riesgo_total }} </div>
+      <p>Riesgo </p>
+    </div>
+
+    <!-- Perfil -->
+    <div class="perfil "style="border: 10px solid {{ color_riesgo }};">
+      <span class="estado" style="background:{{ color_riesgo }}">Riesgo {{ riesgo.nivel_global }}</span>
+      <img src="{% static 'img/placeholder.png' %}" alt="Foto_candidato">
+    </div>
+
+    <!-- Datos biográficos -->
+    <div class="datos">
+      <h3>{{ riesgo.candidato.nombre }} {{ riesgo.candidato.apellido }}</h3>
+      <p class="dato"><strong>Sexo:</strong> {{ riesgo.candidato.sexo }}</p>
+      <p class="dato"><strong>Fecha de nacimiento:</strong> {{ riesgo.candidato.fecha_nacimiento }}</p>
+      <p class="dato"><strong>N° Documento:</strong> {{ riesgo.candidato.cedula }}</p>
+      <!-- Si tienes estado civil en el JSON, reemplázalo, si no puedes omitirlo o dejar un valor por defecto -->
+      <p class="dato"><strong>Estado civil:</strong> Soltero</p>
+    </div>
+  </div>
+</div>
+
+
+    <!-- Nuevo bloque de estadísticas -->
+<div class="estadisticas">
+  <h2>Estadísticas del candidato</h2>
+  <img src="data:image/png;base64,{{ mapa_riesgo }}" alt="Mapa de calor">
+</div>
+
+
+  </section>
+
+
+<!-- Pie de página -->
+<footer class="footer">
+  <div class="footer-content">
+
+    <!-- Columna 2: Fechas + tipo -->
+    <div class="footer-col">
+      <p><strong>Fecha de generación:</strong> {{ fecha_generacion|date:"d/m/Y H:i" }}</p>
+      {% if fecha_actualizacion %}
+        <p><strong>Última actualización:</strong> {{ fecha_actualizacion|date:"d/m/Y H:i" }}</p>
+      {% endif %}
+      <p><strong>Tipo de reporte:</strong> {{ tipo_reporte }}</p>
+            <p><strong>ID Consulta:</strong> {{ consulta.id }}</p>
+      <p><strong>ID PDF:</strong> {{ consolidado_id }}</p>
+    </div>
+
+    <!-- Columna 3: IP + Usuario -->
+    <div class="footer-col">
+      <p><strong>Dirección IP:</strong> {{ ip_generacion }}</p>
+      <p><strong>Usuario:</strong> {{ usuario }}</p>
+    </div>
+  </div>
+
+  <!-- Aviso legal -->
+  <div class="footer-legal">
+    <p>
+      Aviso Legal: Los resultados presentados en este informe son obtenidos a partir de fuentes públicas y externas. 
+      Econfia no se hace responsable de la veracidad, actualidad ni exactitud de dicha información. 
+      El uso e interpretación de este reporte es responsabilidad exclusiva del usuario.
+    </p>
+  </div>
+</footer>
+
+
+</body>
+</html>

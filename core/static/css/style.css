@@ -1,0 +1,597 @@
+@media print {
+  /* Los contenedores de la lista deben ser bloques normales */
+  .rf-list-wrap,
+  .rf-list {
+    display: block !important;
+    overflow: visible !important;
+    break-inside: auto !important;      /* permitir cortes */
+    page-break-inside: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* Cada fila no se debe partir a la mitad */
+  .rf-row {
+    display: block !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Si hay utilidades de densidad que fijan alturas, anúlal
+
+
+
+/* A4: 210×297 mm */
+  @page { size: A4; margin: 0; }
+  html, body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+    @page {
+    @bottom-center {
+        content: element(footer);
+    }
+    }
+  .page{
+    width: 210mm;
+    height: 297mm;
+background: #073333;
+background: linear-gradient(180deg,rgb(2, 1, 21) 0%, rgb(1, 26, 49) 50%, rgba(5, 2, 31, 1) 100%);
+    page-break-after: always;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+     padding: 20px;
+
+  }
+  
+  .cabecera{
+    width: 170mm;
+    height:40mm;
+    border-radius: 20px;
+    display:flex;
+    flex-direction: row;
+    align-items:center;
+    justify-content:space-between;
+    padding-left: 10mm;
+    padding-right: 10mm;
+    color: white;
+    
+  }
+
+  .cabecera-izq{
+    width: 70mm;
+    height: 30mm;
+    display: flex;
+    align-items: center;
+    justify-content: start;
+  }
+
+  .cabecera-izq img{
+    width: 30mm;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 100%;
+    background: #ffffff;
+  }
+
+  .cabecera-izq span{
+    font-size: 25px;
+    font-weight: 600;
+    margin-left: 5mm;
+    max-width: 70mm;
+  }
+
+  .cabecera-der{
+    width: 70mm;
+    height: 30mm;
+    line-height: 1.5;
+    text-align: right;
+    font-size: 12px;
+  }
+
+  .cabecera-der h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .cabecera-der p {
+    margin: 0;
+  }
+/* --- Datos (QR) --- */
+.cabecera-der img {
+  width: 140px;        /* un poco más grande */
+  height: 140px;
+  border-radius: 20px; /* esquinas redondeadas */
+  object-fit: cover;   /* por si el QR no es cuadrado perfecto */
+}
+
+  /* ---- Contenido central ---- */
+  .contenido {
+    width: 190mm; 
+    height: 70mm;
+    display: flex;
+    justify-content: center;
+    margin-top:10mm;
+  }
+
+/* Tarjeta */
+.card {
+  display: flex;
+  flex-direction: row;      /* Alinea horizontal */
+  justify-content: space-around; /* Espacio equitativo entre los 3 divs */
+  align-items: center;      /* Centra verticalmente */
+  width: 100%;
+  padding: 20px;            /* Un poco de aire interno */
+  padding-left: 50px;
+  box-sizing: border-box;
+  gap: 20px;    
+}
+
+/* --- Riesgo --- */
+.riesgo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 14px;
+  color: #dedede;
+  text-align: center;
+}
+/* --- Riesgo --- */
+.circle {
+  width: 90px;          /* más grande */
+  height: 90px;
+  border-radius: 50%;
+  border: 12px solid #2196f3;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 28px;       /* más grande el número */
+  font-weight: bold;
+  color: #2196f3;
+  margin-bottom: 10px;
+}
+
+/* --- Imagen + Estado --- */
+.perfil {
+  text-align: center;
+  width: 180px;     /* más grande */
+  height: 180px;
+  border-radius: 50%;
+  margin-left: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden; /* recorta la imagen circular */
+  border: 6px solid #0bb2e0ff;
+}
+
+.perfil img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* --- Datos --- */
+.datos {
+  display: flex;
+  max-width: 50mm;
+  flex-direction: column;
+  justify-content: center;
+  text-align: right;
+  color: #dedede;
+  font-size: 14px;
+}
+
+
+  /* ---- Nuevo contenedor estadísticas ---- */
+  .estadisticas {
+    width: 190mm; 
+    height: 90mm;
+    color: white;
+    margin-top: 10mm;
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .estadisticas h2 {
+    text-align: center;
+    font-size: 18px;
+    margin: 0 0 5px 0;
+    color: #ffffff;
+  }
+
+  .graficos {
+    display: flex;
+    flex-direction: row;
+    width: 170mm;
+  }
+  #mapa{
+    width: 80mm;
+  }
+  #bubble{
+    width: 65mm; 
+    margin-left: 100mm;
+  }
+   .footer {
+    position: fixed;
+    width: 100%;
+    background: #f0f0f0;
+    margin-top: auto;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    font-size: 11px;
+    color: #333;
+    border-top: 2px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    bottom: 0;
+
+  }
+
+  .footer-content {
+    display: flex;
+    justify-content: space-between; /* columnas separadas */
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;    
+    min-width: 0;
+  }
+
+  .footer-col img {
+    width: 5mm;
+    height: 5mm;
+    object-fit: contain;
+  }
+
+  .footer-col p, .footer-col span {
+    margin: 0;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .footer-legal {
+    font-size: 9px;
+    color: #666;
+    text-align: justify;
+    margin-top: 6px;
+    border-top: 1px dashed #aaa;
+    padding-top: 4px;
+    width: 100%;
+  }
+
+
+
+.resultado-card {
+  position: relative;
+  width: 90%;
+  min-height: 90vh;
+  padding: 25px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  font-family: "Poppins", sans-serif;
+  color: #ffffff;
+
+  /* Fondo semitransparente con gradiente */
+  background: linear-gradient(
+    135deg,
+    rgba(20, 20, 40, 0.9),
+    rgba(30, 30, 60, 0.8)
+  );
+
+  /* Borde neon */
+  border: 2px solid rgba(0, 106, 255, 0.7);
+
+  /* Glow simulando neon */
+  box-shadow:
+    0 0 8px rgba(0, 247, 255, 0.7),
+    0 0 16px rgba(0, 166, 255, 0.5);
+}
+
+/* Encabezado */
+.resultado-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.titulo {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1e40af;
+}
+.subtitulo {
+  font-size: 14px;
+  color: #d4ddef;
+}
+.resultado-status {
+  display: flex;
+  flex-direction: column;
+  background: #c1e510ff;
+  width:20mm;
+}
+
+.score {
+  background: #f8f8f8ff; /* azul */
+}
+
+/* Info */
+.resultado-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.campo {
+  padding: 12px;
+  border-radius: 8px;
+  max-width: 100mm;
+  font-size: 13px;
+  color: white;
+}
+.campo span {
+  display: block;
+  font-size: 11px;
+  color: rgb(242, 242, 254);
+}
+.campo strong {
+  font-weight: 600;
+}
+.mensaje p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  width: 170mm;
+}
+
+/* Captura */
+.resultado-captura {
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+}
+.captura-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: white;
+}
+.resultado-captura img {
+  width: auto;
+  max-width: 175mm;
+  max-height: 90mm;
+  border-radius: 20px;
+  object-fit: contain;
+}
+  .semaforo-container {
+    position: absolute;
+    top: 30%;         
+    right: 20mm;       
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 15px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+.semaforo-container.first-in-category {
+  top: 40%; 
+}
+  .semaforo-container img {
+    width: 80px;
+    height: auto;
+    margin-left: 30px;
+    margin-bottom: 8px;
+  }
+
+  .semaforo-container p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fefefe;
+  }
+
+  .holograma {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.02)
+  );
+  border: 2px solid var(--riesgo-color);
+  border-radius: 15px;
+  padding: 20px;
+  color: #fff;
+  box-shadow: 0 0 15px var(--riesgo-color), 0 0 30px rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.holograma h2 {
+  text-shadow: 0 0 8px var(--riesgo-color);
+  font-weight: 600;
+}
+
+
+
+.categoria-titulo {
+  color: #fff;
+  margin-bottom: -20px;
+}
+
+/* Fuentes resumen */
+
+.rf-list-wrap {
+  width: 190mm;
+  height: 245mm;                 /* encaja en tu .page */
+  margin-top: 6mm;
+  padding: 6mm;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  border: 2px solid rgba(0, 174, 255, .55);
+  color: #fff;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 5mm;
+  overflow: hidden;              /* no desbordar visualmente */
+}
+
+/* Variantes por tipo */
+.rf-list--ok {
+  border-color: rgba(46,204,113,.7);
+  background-image: linear-gradient(135deg, rgba(46,204,113,.10), rgba(46,204,113,.04));
+}
+.rf-list--off {
+  border-color: rgba(243,156,18,.7);
+  background-image: linear-gradient(135deg, rgba(243,156,18,.10), rgba(243,156,18,.04));
+}
+
+/* Encabezado */
+.rf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8mm;
+  padding: 0 2mm 3mm 2mm;
+  border-bottom: 1px dashed rgba(255,255,255,.18);
+}
+.rf-title {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: .3px;
+}
+.rf-title--ok  { color: #2ecc71; }
+.rf-title--off { color: #f39c12; }
+.rf-count { margin: 0; font-size: 11px; color: #cfd8ff; }
+
+/* Lista y filas */
+.rf-list {
+  display: grid;
+  grid-auto-rows: var(--row-h, 6.2mm);   /* alto de fila base */
+  row-gap: 1.4mm;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Densidades (se setean por clase en el contenedor) */
+.rf-density--tight  { --row-h: 5.6mm; --fs: 9px; }
+.rf-density--ultra  { --row-h: 4.8mm; --fs: 8px; }
+.rf-density--nano   { --row-h: 4.2mm; --fs: 7px; }  /* para muy grandes */
+
+.rf-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  padding: 1mm 2mm;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  background: rgba(0,0,0,.20);
+  break-inside: avoid;
+}
+.rf-row:nth-child(odd) { background: rgba(255,255,255,.03); }
+
+.rf-name {
+  font-size: var(--fs, 10px);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Evitar cortes feos en PDF */
+.rf-list-wrap, .rf-head, .rf-row { break-inside: avoid; }
+
+
+/* Imagenes de estadisticas */
+
+.viz-wrap {
+  width: 190mm;
+  height: 245mm;
+  margin-top: 6mm;
+  padding: 6mm;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  border: 2px solid rgba(0, 174, 255, .55);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6mm;
+  overflow: hidden;
+  break-inside: avoid;
+}
+
+.viz-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dashed rgba(255,255,255,.18);
+  padding: 0 2mm 3mm 2mm;
+}
+.viz-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: .3px;
+  color: #cfe8ff;
+}
+.viz-meta { margin: 0; font-size: 11px; color: #cfd8ff; }
+
+.viz-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6mm;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.viz-card {
+  --accent: rgba(0,174,255,.75);
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  padding: 6mm;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 10px rgba(0,174,255,.25), 0 0 25px rgba(255,255,255,.07);
+  break-inside: avoid;
+}
+
+.viz-card h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e7f3ff;
+  text-align: center;
+}
+
+.viz-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 100mm;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(0,0,0,.15);
+}
+
+
+

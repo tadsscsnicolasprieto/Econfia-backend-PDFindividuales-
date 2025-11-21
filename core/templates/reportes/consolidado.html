@@ -1,0 +1,322 @@
+{% load static %}
+{% load color_filters %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>{{ candidato.nombre|slugify }}_{{ candidato.apellido|slugify }}_{{ candidato.cedula }}</title>
+
+<!-- Fuente -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+</head>
+<body>
+<section class="page">
+<header class="cabecera"
+  style="
+    min-height:120px; padding:12px 16px;
+    color:#fff;                 /* mejor contraste */
+    text-shadow:0 1px 2px rgba(0,0,0,.35);
+    {% if color_riesgo == 'yellow' %}
+      /* Amarillos quemados: dorado -> ámbar -> naranja tostado */
+      background:
+        radial-gradient(1200px 600px at 100% -20%, rgba(0,0,0,.18), transparent 60%),
+        linear-gradient(115deg,
+          #FFE500 0%,
+          #FFC400 22%,
+          #FFAA00 44%,
+          #FF8F00 66%,
+          #FF6D00 100%);
+    {% elif color_riesgo == 'green' %}
+      /* Verdes vivos: lima -> esmeralda -> petróleo */
+      background:
+        radial-gradient(1200px 600px at -10% 120%, rgba(0,0,0,.18), transparent 60%),
+        linear-gradient(115deg,
+          #00E676 0%,
+          #00D45E 20%,
+          #00C853 42%,
+          #00BFA5 66%,
+          #00796B 100%);
+    {% elif color_riesgo == 'red' %}
+      /* Rojos “quemados”: coral -> rojo vivo -> carmín oscuro */
+      background:
+        radial-gradient(1200px 600px at 0% -10%, rgba(0,0,0,.20), transparent 60%),
+        linear-gradient(115deg,
+          #FF512F 0%,
+          #FF2D20 22%,
+          #FF1744 48%,
+          #E50914 72%,
+          #B00020 100%);
+    {% else %}
+      background: {{ color_riesgo }};
+    {% endif %}
+  ">
+  <div class="cabecera-izq">
+    <img src="{% static 'img/logo.jpg' %}" alt="Logo">
+    <span class="nombre">ECONFIA</span>
+  </div>
+  <div class="cabecera-der">
+    <img src="{{ qr_url }}" alt="QR Reporte" style="width:120px; height:120px;">
+  </div>
+</header>
+
+
+<div class="contenido">
+  <div class="card">
+    <div class="riesgo"  >
+      <div class="circle"style="border: 10px solid {{ color_riesgo }}; color: {{ color_riesgo }};">{{ riesgo.riesgo }} </div>
+      <p>Nivel de riesgo: <strong>:{{ riesgo.categoria }}</strong> </p>
+    </div>
+
+    <!-- Perfil -->
+    <div class="perfil" style="border: 10px solid {{ color_riesgo }};">
+      {% if riesgo.categoria == "Bajo" %}
+        {% if candidato.sexo|lower == "femenino" or candidato.sexo|lower == "f" or candidato.sexo|lower == "mujer" %}
+          <img src="{% static 'img/placeholder_femenino_verde.png' %}" alt="Foto candidata">
+        {% else %}
+          <img src="{% static 'img/placeholder_verde.png' %}" alt="Foto candidato">
+        {% endif %}
+      {% elif riesgo.categoria == "Alto" %}
+        {% if candidato.sexo|lower == "femenino" or candidato.sexo|lower == "f" or candidato.sexo|lower == "mujer" %}
+          <img src="{% static 'img/placeholder_femenino_rojo.png' %}" alt="Foto candidata">
+        {% else %}
+          <img src="{% static 'img/placeholder_rojo.png' %}" alt="Foto candidato">
+        {% endif %}
+      {% elif riesgo.categoria == "Medio" %}
+        {% if candidato.sexo|lower == "femenino" or candidato.sexo|lower == "f" or candidato.sexo|lower == "mujer" %}
+          <img src="{% static 'img/placeholder_femenino_amarillo.png' %}" alt="Foto candidata">
+        {% else %}
+          <img src="{% static 'img/placeholder_amarillo.png' %}" alt="Foto candidato">
+        {% endif %}
+      {% else %}
+        {% if candidato.sexo|lower == "femenino" or candidato.sexo|lower == "f" or candidato.sexo|lower == "mujer" %}
+          <img src="{% static 'img/placeholder_femenino_gris.png' %}" alt="Foto candidata">
+        {% else %}
+          <img src="{% static 'img/placeholder_gris.png' %}" alt="Foto candidato">
+        {% endif %}
+      {% endif %}
+    </div>
+
+
+
+    <!-- Datos biográficos -->
+    <div class="datos">
+      <h3>{{ candidato.nombre }} {{ candidato.apellido }}</h3>
+      <p class="dato"><strong>Sexo:</strong> {{ candidato.sexo }}</p>
+      <p class="dato"><strong>Fecha de nacimiento:</strong> {{ candidato.fecha_nacimiento }}</p>
+      <p class="dato"><strong>Cupo numérico:</strong> {{ candidato.cedula }}</p>
+    </div>
+  </div>
+</div>
+
+
+    <!-- Nuevo bloque de estadísticas -->
+<div class="estadisticas holograma" style="--riesgo-color: {{ color_riesgo }};">
+  <h2>Estadísticas del candidato</h2>
+  <div class="graficos">
+    <img id="mapa" src="data:image/png;base64,{{ mapa_riesgo }}" alt="Mapa de calor">
+    <img id="bubble" src="data:image/png;base64,{{ bubble_chart }}" alt="Mapa de burbuja">
+  </div>
+</div>
+
+
+
+  </section>
+
+{% for resultado in resultados %}
+
+  <section class="page">
+    <div class="resultado-card">
+        {# Si cambia la categoría, mostramos el título #}
+      {% ifchanged resultado.tipo_fuente %}
+        <h1 class="categoria-titulo">Categoria: {{ resultado.tipo_fuente }}</h1>
+      {% endifchanged %}
+
+      <!-- Encabezado -->
+      <div class="resultado-header">
+        <div>
+          <h2 class="titulo">{{ resultado.fuente }}</h2>
+          <p class="subtitulo">{{ resultado.tipo_fuente }}</p>
+        </div>
+      </div>
+
+      <!-- Info principal -->
+      <div class="resultado-info">
+        <div class="campo">
+          <span>Fuente</span>
+          <strong>{{ resultado.fuente }}</strong>
+        </div>
+        <div class="campo">
+          <span>Tipo de Fuente</span>
+          <strong>{{ resultado.tipo_fuente }}</strong>
+        </div>
+        <div class="campo">
+          <span>ID Resultado</span>
+          <strong>{{ resultado.id }}</strong>
+        </div>
+        <div class="campo mensaje">
+          <span>Mensaje</span>
+          <p>{{ resultado.mensaje }}</p>
+        </div>
+      </div>
+
+      <!-- Imagen (solo si existe) -->
+      {% if resultado.archivo_url %}
+      <div class="resultado-captura">
+        <img src="{{ resultado.archivo_url }}" alt="Captura">
+      </div>
+      {% endif %}
+
+      <!-- Semáforo / Score -->
+      <div class="semaforo-container {% ifchanged resultado.tipo_fuente %}first-in-category{% endifchanged %}">
+        {% with resultado.score|floatformat:0 as score %}
+          {% if score == "4" or score == "5" %}
+            <img src="{% static 'img/semaforo_rojo.png' %}" alt="Alto riesgo">
+          {% elif score == "3" %}
+            <img src="{% static 'img/semaforo_amarillo.png' %}" alt="Riesgo medio">
+          {% elif score == "1" or score == "2" %}
+            <img src="{% static 'img/semaforo_verde.png' %}" alt="Bajo riesgo">
+          {% else %}
+            <img src="{% static 'img/semaforo_gris.png' %}" alt="Nivel desconocido">
+          {% endif %}
+        {% endwith %}
+        <p>Score obtenido: {{ resultado.score }}</p>
+      </div>
+
+    </div>
+  </section>
+
+{% endfor %}
+
+{# ========= BLOQUE CORREGIDO: ordenar copia por estado y luego reagrupar ========= #}
+{% with resultados|dictsort:"estado" as resultados_por_estado %}
+  {% regroup resultados_por_estado by estado|lower as grupos %}
+
+  {# Tamaño de página (cuántas filas por sección A4) #}
+  {% with 30 as page_size %}
+
+  {# ========== VALIDADAS ========== #}
+  {% for g in grupos %}
+    {% if g.grouper == 'validado' %}
+      {% with g.list as validos %}
+      {% with validos|length as total_ok %}
+
+        {% for r in validos %}
+          {% if forloop.first or forloop.counter0|divisibleby:page_size %}
+<section class="page">
+  <div class="rf-list-wrap rf-list--ok {% if total_ok > 220 %}rf-density--nano{% elif total_ok > 160 %}rf-density--ultra{% elif total_ok > 100 %}rf-density--tight{% endif %}">
+    <div class="rf-head">
+      <h1 class="rf-title rf-title--ok">Fuentes validadas{% if not forloop.first %} (continúa){% endif %}</h1>
+      <p class="rf-count">Total: {{ total_ok }}</p>
+    </div>
+    <div class="rf-list">
+          {% endif %}
+
+      <div class="rf-row">
+        <span class="rf-name" title="{{ r.fuente }}">{{ r.fuente }}</span>
+      </div>
+
+          {% if forloop.last or forloop.counter|divisibleby:page_size %}
+    </div> <!-- .rf-list -->
+  </div>  <!-- .rf-list-wrap -->
+</section>
+          {% endif %}
+        {% endfor %}
+
+      {% endwith %} {# total_ok #}
+      {% endwith %} {# validos #}
+    {% endif %}
+  {% endfor %}
+
+  {# ========== OFFLINE ========== #}
+  {% for g in grupos %}
+    {% if g.grouper == 'offline' %}
+      {% with g.list as offs %}
+      {% with offs|length as total_off %}
+
+        {% for r in offs %}
+          {% if forloop.first or forloop.counter0|divisibleby:page_size %}
+<section class="page">
+  <div class="rf-list-wrap rf-list--off {% if total_off > 220 %}rf-density--nano{% elif total_off > 160 %}rf-density--ultra{% elif total_off > 100 %}rf-density--tight{% endif %}">
+    <div class="rf-head">
+      <h1 class="rf-title rf-title--off">Fuentes offline{% if not forloop.first %} (continúa){% endif %}</h1>
+      <p class="rf-count">Total: {{ total_off }}</p>
+    </div>
+    <div class="rf-list">
+          {% endif %}
+
+      <div class="rf-row">
+        <span class="rf-name" title="{{ r.fuente }}">{{ r.fuente }}</span>
+      </div>
+
+          {% if forloop.last or forloop.counter|divisibleby:page_size %}
+    </div> <!-- .rf-list -->
+  </div>  <!-- .rf-list-wrap -->
+</section>
+          {% endif %}
+        {% endfor %}
+
+      {% endwith %} {# total_off #}
+      {% endwith %} {# offs #}
+    {% endif %}
+  {% endfor %}
+
+  {% endwith %} {# page_size #}
+{% endwith %} {# resultados_por_estado #}
+
+
+<section class="page">
+  <div class="viz-wrap">
+    <div class="viz-head">
+      <h2 class="viz-title">Visualizaciones del reporte</h2>
+      <p class="viz-meta">Generadas a partir de la consulta {{ consulta_id }}</p>
+    </div>
+
+    <div class="viz-grid">
+      <!-- Cilindros -->
+      <figure class="viz-card" style="--accent: {{ color_riesgo|default:'#00aefe' }}">
+        <h3>Resumen de fuentes consultadas en porcentaje</h3>
+        <img src="data:image/png;base64,{{ cilindros }}" style="display:block; max-width:100%; height:auto;" alt="Gráfico de cilindros por estado">
+      </figure>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- Pie de página -->
+<footer class="footer">
+  <div class="footer-content">
+    <!-- Columna 1: Fechas + tipo -->
+    <div class="footer-col">
+      <p><strong>Fecha de generación:</strong> {{ fecha_generacion|date:"d/m/Y H:i" }}</p>
+      {% if fecha_actualizacion %}
+        <p><strong>Última actualización:</strong> {{ fecha_actualizacion|date:"d/m/Y H:i" }}</p>
+      {% endif %}
+      <p><strong>Tipo de reporte:</strong> {{ tipo_reporte }}</p>
+            <p><strong>ID Consulta:</strong> E-C{{ consulta_id }}</p>
+      <p><strong>ID PDF:</strong> E-RP{{ consolidado_id }}</p>
+    </div>
+
+    <!-- Columna 3: IP + Usuario -->
+    <div class="footer-col">
+      <p><strong>Dirección IP:</strong> {{ ip_generacion }}</p>
+      <p><strong>Usuario:</strong> {{ usuario }}</p>
+      <p><strong>Candidato:</strong> {{ candidato.nombre }} {{ candidato.apellido }}</p>
+      <p class="dato"><strong>Cupo numérico:</strong> {{ candidato.cedula }}</p>
+      <!-- Si tienes estado civil en el JSON, reemplázalo, si no puedes omitirlo o dejar un valor por defecto -->
+    </div>
+  </div>
+
+  <!-- Aviso legal -->
+  <div class="footer-legal">
+    <p>
+      Los resultados presentados en este informe provienen de fuentes públicas y externas, gestionada en la fecha y hora de la consulta. Econfía no se hace responsable por la veracidad, actualización, rectificación o corrección de dicha información, ya que estas responsabilidades recaen exclusivamente en las fuentes consultadas. La exactitud, interpretación, administración y uso de los datos contenidos en este informe es responsabilidad exclusiva del usuario que accede al servicio.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

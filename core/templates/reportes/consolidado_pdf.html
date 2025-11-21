@@ -1,0 +1,168 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Página Azul A4</title>
+
+<!-- Fuente -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style_pdf.css' %}">
+
+</head>
+<body>
+  <section class="page">
+    <header class="cabecera" style="background:{{ color_riesgo }}">
+      <div class="cabecera-izq">
+        <img src="{% static 'img/vecteezy_abstract-geometric-logo-or-infinity-line-logo-for-your-company_8214517.jpg' %}" alt="Logo">
+        <span class="nombre">TalentAI</span>
+      </div>
+      <div class="cabecera-der">
+        <h2>Empresa ficticia</h2>
+        <p>nit 123548795</p>
+        <p>Carrera 13A #1564</p>
+        <p>+1 (415) 555-1234</p>
+      </div>
+    </header>
+
+<div class="contenido">
+  <div class="card">
+    <!-- Riesgo -->
+    <div class="riesgo"  >
+      <div class="circle"style="border: 10px solid {{ color_riesgo }}; color: {{ color_riesgo }};">{{ riesgo.riesgo_total }} </div>
+      <p>Riesgo </p>
+    </div>
+
+    <!-- Perfil -->
+    <div class="perfil "style="border: 10px solid {{ color_riesgo }};">
+      <span class="estado" style="background:{{ color_riesgo }}">Riesgo {{ riesgo.nivel_global }}</span>
+      <img src="{% static 'img/placeholder.png' %}" alt="Foto_candidato">
+    </div>
+
+    <!-- Datos biográficos -->
+    <div class="datos">
+      <h3>{{ riesgo.candidato.nombre }} {{ riesgo.candidato.apellido }}</h3>
+      <p class="dato"><strong>Sexo:</strong> {{ riesgo.candidato.sexo }}</p>
+      <p class="dato"><strong>Fecha de nacimiento:</strong> {{ riesgo.candidato.fecha_nacimiento }}</p>
+      <p class="dato"><strong>N° Documento:</strong> {{ riesgo.candidato.cedula }}</p>
+      <!-- Si tienes estado civil en el JSON, reemplázalo, si no puedes omitirlo o dejar un valor por defecto -->
+      <p class="dato"><strong>Estado civil:</strong> Soltero</p>
+    </div>
+  </div>
+</div>
+
+
+    <!-- Nuevo bloque de estadísticas -->
+<div class="estadisticas">
+  <h2>Estadísticas del candidato</h2>
+  <div class="estadisticas-content">
+      <img src="data:image/png;base64,{{ mapa_riesgo }}" alt="Mapa de calor">
+  </div>
+</div>
+
+
+  </section>
+
+  {% for resultado in resultados %}
+    {% if forloop.first %}<section class="page"><div class="resultados-grid">{% endif %}
+
+      <div class="resultado-card">
+        <!-- Encabezado -->
+        <div class="resultado-header">
+          <h2>{{ resultado.fuente }}</h2>
+          <p>{{ resultado.tipo_fuente }}</p>
+        </div>
+
+        <!-- Info -->
+        <div class="resultado-info">
+          <div class="campo">
+            <span>Fuente</span>
+            <strong>{{ resultado.fuente }}</strong>
+          </div>
+          <div class="campo">
+            <span>Tipo de Fuente</span>
+            <strong>{{ resultado.tipo_fuente }}</strong>
+          </div>
+          <div class="campo">
+            <span>ID Resultado</span>
+            <strong>{{ resultado.id }}</strong>
+          </div>
+          <div class="campo mensaje">
+            <span>Mensaje</span>
+            <p>{{ resultado.mensaje }}</p>
+          </div>
+        </div>
+
+        <!-- Imagen -->
+        <div class="resultado-media">
+  {% if resultado.archivo_url %}
+  <div class="resultado-captura">
+    <img src="{{ resultado.archivo_url }}" alt="Captura">
+  </div>
+  {% endif %}
+
+  <div class="semaforo-container">
+    {% with resultado.score|floatformat:0 as score %}
+      {% if score == "10" or score == "6" %}
+        <img src="{% static 'img/semaforo_rojo.png' %}" alt="Alto riesgo">
+      {% elif score == "2" %}
+        <img src="{% static 'img/semaforo_amarillo.png' %}" alt="Riesgo medio">
+      {% elif score == "0" %}
+        <img src="{% static 'img/semaforo_verde.png' %}" alt="Bajo riesgo">
+      {% else %}
+        <img src="{% static 'img/semaforo_gris.png' %}" alt="Nivel desconocido">
+      {% endif %}
+    {% endwith %}
+    <p>Score: {{ resultado.score }}</p>
+  </div>
+</div>
+
+      </div>
+
+    {% if forloop.counter|divisibleby:2 and not forloop.last %}
+        </div></section><section class="page"><div class="resultados-grid">
+    {% elif forloop.last %}
+        </div></section>
+    {% endif %}
+  {% endfor %}
+<!-- Pie de página -->
+<footer class="footer">
+  <div class="footer-content">
+    <!-- Columna 1: QR + IDs -->
+    <div class="footer-col">
+      <img src="{{ qr_url }}" alt="QR Reporte" style="width:120px; height:120px;">
+
+    </div>
+
+    <!-- Columna 2: Fechas + tipo -->
+    <div class="footer-col">
+      <p><strong>Fecha de generación:</strong> {{ fecha_generacion|date:"d/m/Y H:i" }}</p>
+      {% if fecha_actualizacion %}
+        <p><strong>Última actualización:</strong> {{ fecha_actualizacion|date:"d/m/Y H:i" }}</p>
+      {% endif %}
+      <p><strong>Tipo de reporte:</strong> {{ tipo_reporte }}</p>
+            <p><strong>ID Consulta:</strong> {{ consulta.id }}</p>
+      <p><strong>ID PDF:</strong> {{ consolidado_id }}</p>
+    </div>
+
+    <!-- Columna 3: IP + Usuario -->
+    <div class="footer-col">
+      <p><strong>Dirección IP:</strong> {{ ip_generacion }}</p>
+      <p><strong>Usuario:</strong> {{ usuario }}</p>
+    </div>
+  </div>
+
+  <!-- Aviso legal -->
+  <div class="footer-legal">
+    <p>
+      Aviso Legal: Los resultados presentados en este informe son obtenidos a partir de fuentes públicas y externas. 
+      Econfia no se hace responsable de la veracidad, actualidad ni exactitud de dicha información. 
+      El uso e interpretación de este reporte es responsabilidad exclusiva del usuario.
+    </p>
+  </div>
+</footer>
+
+
+</body>
+</html>
