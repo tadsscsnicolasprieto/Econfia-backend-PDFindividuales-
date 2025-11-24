@@ -185,4 +185,25 @@ FUENTES_BOTS = [
     "adres_transito",
     "adres",
     "adb_sanctions"
-]
+        # --- Agregados contratistas/jurídicos ---
+        "rama_abogado_certificado",
+        "porvenir_cert_afiliacion",
+        "cpae_verify_certification",
+        "conpucol_verificacion_colegiados",
+        "conaltel_consulta_matriculados",
+        "skandia_enviar_certificado",
+        "supersociedades_boletines",
+        "dfat_consolidated_pdf",
+        "dgtresor_gels",
+        "dhs_search",
+        "dian_formalizacion_personas",
+        "doj_fcpa_search_pdf",
+        "ecfr_part744_appendix_pdf",
+        "ecfr_search_pdf",
+        "eeas",
+        "embajada_alemania_funcionarios",
+        "eo_13224_findit",
+        "epa_fugitives_search_pdf",
+        "eur_lex_2022_398",
+        "eur_lex_2022_399"
+    ]

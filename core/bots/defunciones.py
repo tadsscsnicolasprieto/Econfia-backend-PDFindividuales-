@@ -48,7 +48,7 @@ async def consultar_defunciones(consulta_id: int, cedula: str):
     try:
         async with async_playwright() as p:
             # viewport amplio; full_page ignora la altura, pero esto ayuda con anchos responsivos
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             contexto = await navegador.new_context(
                 viewport={"width": 1600, "height": 1000},
                 device_scale_factor=1,

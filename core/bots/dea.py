@@ -77,7 +77,7 @@ async def consultar_dea(consulta_id: int, cedula: str):
     try:
         # ---------- Navegación y búsqueda ----------
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             page = await navegador.new_page()
             await page.goto(URL, timeout=60000)
             try:

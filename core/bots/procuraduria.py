@@ -86,7 +86,7 @@ async def consultar_procuraduria(consulta_id, cedula, tipo_doc):
 
         # ---------- navegación ----------
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
             page = await context.new_page()
 

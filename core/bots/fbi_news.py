@@ -103,7 +103,7 @@ async def consultar_fbi_news(consulta_id: int, nombre_completo: str):
     try:
         # 3) Navegación y captura
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             context = await navegador.new_context(viewport={"width": 1440, "height": 900}, locale="en-US")
             page = await context.new_page()
 

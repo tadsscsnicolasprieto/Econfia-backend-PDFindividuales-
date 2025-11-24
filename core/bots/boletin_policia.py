@@ -30,7 +30,7 @@ async def consultar_boletin_policia(cedula: str, consulta_id: int, nombre: str):
     navegador = None
     try:
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             pagina = await navegador.new_page()
             await pagina.goto(url, timeout=60000)
 

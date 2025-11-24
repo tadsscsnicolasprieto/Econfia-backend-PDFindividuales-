@@ -90,7 +90,7 @@ async def consultar_adres(consulta_id: int, cedula: str, tipo_doc: str):
         async with async_playwright() as p:
             tipo_doc_val = TIPO_DOC_MAP.get(tipo_doc.upper())
 
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             pagina = await navegador.new_page()
             await pagina.goto(url)
 

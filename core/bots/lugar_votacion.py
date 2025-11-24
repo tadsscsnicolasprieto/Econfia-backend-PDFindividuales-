@@ -43,7 +43,7 @@ async def consultar_lugar_votacion(consulta_id: int, cedula: str):
         relative_path = os.path.join(relative_folder, screenshot_name)
 
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             pagina = await navegador.new_page()
             await pagina.goto(url)
 

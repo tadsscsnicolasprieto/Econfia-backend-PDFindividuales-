@@ -141,7 +141,7 @@ async def consultar_adres_transito(consulta_id: int, cedula: str):
         fuente = await _get_fuente_by_nombre(nombre_sitio)
 
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             pagina = await navegador.new_page()
             await pagina.goto(url, wait_until="load")
 

@@ -116,7 +116,7 @@ async def consultar_porvenir_cert_afiliacion(consulta_id: int, cedula: str, tipo
             raise ValueError(f"Tipo de documento no soportado: {tipo_doc!r}")
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 accept_downloads=True, viewport={"width": 1400, "height": 900}, locale="es-CO"
             )

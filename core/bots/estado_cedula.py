@@ -167,7 +167,7 @@ async def consultar_estado_cedula(consulta_id: int, cedula: str, fecha_expedicio
         anio, mes, dia = _split_fecha(fecha_expedicion)
 
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             ctx = await navegador.new_context(accept_downloads=True, viewport={"width": 1440, "height": 950})
             page = await ctx.new_page()
 

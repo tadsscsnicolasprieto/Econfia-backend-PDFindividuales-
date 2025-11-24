@@ -57,7 +57,7 @@ async def consultar_ruaf(cedula, tipo_doc, fecha_expedicion, consulta_id):
                 raise ValueError(f"Tipo de documento no válido: {tipo_doc}")
 
             async with async_playwright() as p:
-                navegador = await p.chromium.launch(headless=False)
+                navegador = await p.chromium.launch(headless=True)
                 pagina = await navegador.new_page()
                 await pagina.goto(url)
 

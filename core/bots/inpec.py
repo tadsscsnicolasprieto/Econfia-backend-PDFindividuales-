@@ -41,7 +41,7 @@ async def consultar_inpec(consulta_id: int, cedula: str, apellidos: str):
 
     try:
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             pagina = await navegador.new_page()
 
             # Intentar cargar la página

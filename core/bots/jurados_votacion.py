@@ -47,7 +47,7 @@ async def consultar_jurados_votacion(consulta_id: int, cedula: str):
             print(f"🔄 Intento {intento} de {MAX_INTENTOS}")
 
             async with async_playwright() as p:
-                navegador = await p.chromium.launch(headless=False)
+                navegador = await p.chromium.launch(headless=True)
                 pagina = await navegador.new_page()
                 await pagina.goto(url)
 

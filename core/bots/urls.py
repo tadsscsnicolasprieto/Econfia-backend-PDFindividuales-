@@ -1,6 +1,6 @@
 # core/urls.py
 from django.urls import path
-from . import views
+from core.bots import views
 
 urlpatterns = [
     path('api/consultar/', views.api_consultar),

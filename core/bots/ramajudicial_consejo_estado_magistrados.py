@@ -66,7 +66,7 @@ async def consultar_ramajudicial_corte_constitucional_magistrados(
 
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
+            browser = await p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
             ctx = await browser.new_context(viewport={"width": 1440, "height": 1000}, locale="es-CO")
             page = await ctx.new_page()
 

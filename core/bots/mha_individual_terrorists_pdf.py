@@ -102,7 +102,7 @@ async def consultar_mha_individual_terrorists_pdf(consulta_id: int, nombre: str,
     try:
         # --- Etapa visible: buscar y evaluar resultados ---
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 viewport={"width": 1440, "height": 1000},
                 locale="en-IN"

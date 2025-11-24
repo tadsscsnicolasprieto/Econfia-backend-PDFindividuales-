@@ -23,7 +23,7 @@ async def consultar_registro_civil(cedula, consulta_id, sexo="SIN INFORMACION"):
         navegador = None
         try:
             async with async_playwright() as p:
-                navegador = await p.chromium.launch(headless=False)
+                navegador = await p.chromium.launch(headless=True)
                 pagina = await navegador.new_page()
                 await pagina.goto(url)
 

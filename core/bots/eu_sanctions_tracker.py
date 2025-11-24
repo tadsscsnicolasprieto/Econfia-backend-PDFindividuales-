@@ -66,7 +66,7 @@ async def consultar_eu_sanctions_tracker(consulta_id: int, nombre_completo: str)
 
         # 4) Navegación y captura
         async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
+            navegador = await p.chromium.launch(headless=True)
             context = await navegador.new_context(viewport={"width": 1400, "height": 900}, locale="en-US")
             page = await context.new_page()
 

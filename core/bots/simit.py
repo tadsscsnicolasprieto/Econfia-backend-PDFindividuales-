@@ -168,7 +168,7 @@ async def consultar_simit(cedula: str, consulta_id: int, tipo_doc: str = "CC"):
         page = None
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=False)
+                browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(accept_downloads=True, viewport={"width": 1440, "height": 960})
                 page = await context.new_page()
 

@@ -58,7 +58,7 @@ async def consultar_afdb(consulta_id: int, nombre: str, apellido: str):
     browser = None
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
+            browser = await p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
             ctx = await browser.new_context(viewport={"width": 1440, "height": 1000}, locale="en-US")
             page = await ctx.new_page()
 
