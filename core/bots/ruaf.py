@@ -9,6 +9,7 @@ from core.models import Resultado, Fuente
 import cv2
 import numpy as np
 import fitz  # PyMuPDF
+import traceback #Se agrego manejo de errores en la consulta 
 
 
 def preprocesar_captcha(ruta_origen, ruta_destino):
@@ -149,7 +150,8 @@ async def consultar_ruaf(cedula, tipo_doc, fecha_expedicion, consulta_id):
                 print("⚠️ Fallo captcha en todos los intentos")
 
         except Exception as e:
-            print(f"❌ Error intento {intento_general}: {e}")
+            tb = traceback.format_exc()
+            print(f"❌ Error intento {intento_general}: {e}\n{tb}")
             if intento_general == MAX_INTENTOS:
                 error_screenshot = os.path.join(
                     absolute_folder,
@@ -165,11 +167,23 @@ async def consultar_ruaf(cedula, tipo_doc, fecha_expedicion, consulta_id):
                     cv2.imwrite(error_screenshot, img_blank)
 
                 if fuente_obj:
+                    # Guardar el traceback parcial en el mensaje para facilitar diagnóstico
+                    mensaje_err = f"No se pudo realizar la consulta en el momento. Error: {str(e)}"
+                    # Truncar traceback para no exceder campos de texto
+                    tb_snippet = (tb or '').strip()[:1500]
+                    if tb_snippet:
+                        mensaje_err = mensaje_err + "\\nTraceback:\\n" + tb_snippet
                     await sync_to_async(Resultado.objects.create)(
                         consulta_id=consulta_id,
                         fuente=fuente_obj,
                         score=0,
                         estado="Sin validar",
-                        mensaje="No se pudo realizar la consulta en el momento.",
+                        mensaje=mensaje_err,
                         archivo=os.path.join(relative_folder, os.path.basename(error_screenshot))
                     )
+            # Asegurar cierre del navegador si quedó abierto
+            try:
+                if 'navegador' in locals():
+                    await navegador.close()
+            except Exception:
+                pass

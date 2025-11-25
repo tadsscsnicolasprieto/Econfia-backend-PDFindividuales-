@@ -3,8 +3,9 @@ from datetime import datetime
 from playwright.async_api import async_playwright
 from django.conf import settings
 from asgiref.sync import sync_to_async
+import traceback
 
-from core.models import Consulta, Resultado, Fuente  # <- ajusta si aplica
+from core.models import Consulta, Resultado, Fuente
 from core.resolver.captcha_img import resolver_captcha_imagen
 
 url = "https://www.adres.gov.co/consulte-su-eps"
@@ -15,45 +16,9 @@ TIPO_DOC_MAP = {
     'AS': 'AS', 'MS': 'MS', 'CD': 'CD', 'CN': 'CN', 'SC': 'SC', 'PE': 'PE', 'PT': 'PT'
 }
 
-# -------- NUEVOS HELPERS (no tocan captcha) --------
-
-async def _extraer_mensaje_y_score(pagina):
-    """
-    (mensaje, score)
-    - Si aparece #PanelNoAfiliado #lblError => mensaje literal, score 6 (alto)
-    - Si aparece #GridViewBasica => mensaje plano con pares 'COLUMNA: DATO', score 0 (bajo)
-    - Si no se identifica => mensaje genérico, score 2 (medio)
-    """
-    # Caso: NO afiliado
-    try:
-        if await pagina.locator("#PanelNoAfiliado #lblError").is_visible():
-            txt = (await pagina.locator("#PanelNoAfiliado #lblError").inner_text()).strip()
-            if txt:
-                return txt, 6
-    except Exception:
-        pass
-
-    # Caso: AFILIADO (tabla)
-    try:
-        if await pagina.locator("#GridViewBasica").is_visible():
-            filas = pagina.locator("#GridViewBasica tr")
-            n = await filas.count()
-            pares = []
-            for i in range(1, n):  # saltar header
-                celdas = filas.nth(i).locator("td")
-                if await celdas.count() >= 2:
-                    col = (await celdas.nth(0).inner_text()).strip()
-                    val = (await celdas.nth(1).inner_text()).strip()
-                    if col and val:
-                        pares.append(f"{col}: {val}")
-            if pares:
-                mensaje = "Información Básica del Afiliado:\n" + "\n".join(pares)
-                return mensaje, 0
-    except Exception:
-        pass
-
-    return "Resultado obtenido (revisar captura).", 2
-
+# ====================================================================
+#                          HELPERS BD
+# ====================================================================
 
 async def _get_fuente_by_nombre(nombre: str):
     return await sync_to_async(lambda: Fuente.objects.filter(nombre=nombre).first())()
@@ -77,96 +42,297 @@ async def _crear_resultado_error(consulta_id: int, fuente, mensaje: str):
         archivo=""
     )
 
+# ====================================================================
+#                    DETECCIÓN AUTOMÁTICA DEL IFRAME
+# ====================================================================
 
-# ------------------- FUNCIÓN PRINCIPAL -------------------
+async def get_iframe_form(pagina):
+    """
+    Detecta el iframe correcto donde está el formulario de ADRES.
+    """
+    for f in pagina.frames:
+        try:
+            u = f.url.lower()
+            if "bdua" in u or "afiliado" in u or "consulta" in u:
+                return f
+        except:
+            pass
+
+    try:
+        fr = await pagina.frame_locator("iframe#iframe").content_frame()
+        if fr:
+            return fr
+    except:
+        pass
+
+    try:
+        iframes = pagina.locator("iframe")
+        count = await iframes.count()
+        for i in range(count):
+            fr = await iframes.nth(i).content_frame()
+            if fr:
+                return fr
+    except:
+        pass
+
+    return None
+
+# ====================================================================
+#            LOCALIZADORES (funcionan dentro del iframe)
+# ====================================================================
+
+async def localizar_select_tipo(ctx):
+    sels = [
+        'select#tipoDoc',
+        'select[name="tipoDoc"]'
+    ]
+    for s in sels:
+        try:
+            loc = ctx.locator(s)
+            if await loc.count() > 0:
+                return loc
+        except:
+            pass
+
+    try:
+        loc = ctx.get_by_label("Tipo Documento")
+        if await loc.count() > 0:
+            return loc
+    except:
+        pass
+
+    try:
+        loc = ctx.locator("text=Tipo Documento").locator("xpath=..").locator("select")
+        if await loc.count() > 0:
+            return loc
+    except:
+        pass
+    return None
+
+
+async def localizar_input_num(ctx):
+    tries = [
+        'input#txtNumDoc',
+        'input[name="txtNumDoc"]',
+    ]
+    for s in tries:
+        try:
+            loc = ctx.locator(s)
+            if await loc.count() > 0:
+                return loc
+        except:
+            pass
+
+    try:
+        loc = ctx.get_by_label("Número")
+        if await loc.count() > 0:
+            return loc
+    except:
+        pass
+
+    try:
+        cand = ctx.locator('input[placeholder*="documento"], input[placeholder*="Documento"]')
+        if await cand.count() > 0:
+            return cand.nth(0)
+    except:
+        pass
+
+    return None
+
+
+async def localizar_img_captcha(ctx):
+    sels = [
+        'img#Capcha_CaptchaImageUP',
+        'img[id*="Captcha"]',
+        'img[src*="rca"]',
+        'div#Capcha img',
+    ]
+    for s in sels:
+        try:
+            loc = ctx.locator(s)
+            if await loc.count() > 0:
+                return loc.nth(0)
+        except:
+            pass
+    return None
+
+# ====================================================================
+#                 EXTRACCIÓN DE MENSAJE Y SCORE
+# ====================================================================
+
+async def _extraer_mensaje_y_score(pagina):
+    try:
+        if await pagina.locator("#PanelNoAfiliado #lblError").is_visible():
+            txt = (await pagina.locator("#PanelNoAfiliado #lblError").inner_text()).strip()
+            return txt, 6
+    except:
+        pass
+
+    try:
+        if await pagina.locator("#GridViewBasica").is_visible():
+            filas = pagina.locator("#GridViewBasica tr")
+            n = await filas.count()
+            pares = []
+            for i in range(1, n):
+                celdas = filas.nth(i).locator("td")
+                if await celdas.count() >= 2:
+                    col = (await celdas.nth(0).inner_text()).strip()
+                    val = (await celdas.nth(1).inner_text()).strip()
+                    pares.append(f"{col}: {val}")
+
+            if pares:
+                mensaje = "Información Básica:\n" + "\n".join(pares)
+                return mensaje, 0
+    except:
+        pass
+
+    return "Resultado obtenido. Revisar captura.", 2
+
+# ====================================================================
+#                     BOT PRINCIPAL ADRES
+# ====================================================================
 
 async def consultar_adres(consulta_id: int, cedula: str, tipo_doc: str):
     max_intentos = 10
+
     try:
-        # Validación de consulta existente
         await sync_to_async(Consulta.objects.get)(id=consulta_id)
         fuente = await _get_fuente_by_nombre(nombre_sitio)
 
+        # Leer variables de entorno para headless y slow_mo
+        headless_env = os.environ.get("ADRES_HEADLESS", "true").lower()
+        headless_flag = headless_env not in ["false", "0", "no"]
+        slow_mo_env = os.environ.get("ADRES_SLOW_MO", "0")
+        try:
+            slow_mo = int(slow_mo_env)
+        except Exception:
+            slow_mo = 0
+
         async with async_playwright() as p:
-            tipo_doc_val = TIPO_DOC_MAP.get(tipo_doc.upper())
+            navegador = await p.chromium.launch(headless=headless_flag, slow_mo=slow_mo)
+            contexto = await navegador.new_context()
+            pagina = await contexto.new_page()
 
-            navegador = await p.chromium.launch(headless=True)
-            pagina = await navegador.new_page()
-            await pagina.goto(url)
+            await pagina.goto(url, wait_until="networkidle")
 
-            await pagina.select_option('select[id="tipoDoc"]', tipo_doc_val)
-            await pagina.fill('input[id="txtNumDoc"]', cedula)
-            await pagina.wait_for_timeout(1000)
+            # ───── Obtener iframe del formulario ─────
+            form_ctx = await get_iframe_form(pagina)
+            if not form_ctx:
+                form_ctx = pagina  # fallback
 
-            # >>> guardar por ID de consulta (no por cédula)
-            relative_folder = os.path.join('resultados', str(consulta_id))
+            # ───── Seleccionar tipo documento ─────
+            try:
+                sel_tipo = await localizar_select_tipo(form_ctx)
+                if sel_tipo:
+                    await sel_tipo.select_option(TIPO_DOC_MAP.get(tipo_doc.upper(), tipo_doc.upper()))
+                    await form_ctx.wait_for_timeout(500)
+            except:
+                pass
+
+            # ───── Rellenar número ─────
+            inp_num = await localizar_input_num(form_ctx)
+            if not inp_num:
+                raise Exception("No se encontró input del número de documento.")
+
+            await inp_num.fill(cedula)
+
+            # ───── Preparar carpetas ─────
+            relative_folder = os.path.join("resultados", str(consulta_id))
             absolute_folder = os.path.join(settings.MEDIA_ROOT, relative_folder)
             os.makedirs(absolute_folder, exist_ok=True)
 
-            pagina_resultado = pagina
+            pagina_resultado = None
 
-            # ========= BUCLE CAPTCHA (NO TOCAR) =========
+            # =================================================================
+            #                        BUCLE CAPTCHA
+            # =================================================================
             for intento in range(1, max_intentos + 1):
-                captcha_path = os.path.join(absolute_folder, f"captcha_{nombre_sitio}.png")
-                await pagina.locator('img#Capcha_CaptchaImageUP').screenshot(path=captcha_path)
+                captcha_img = await localizar_img_captcha(form_ctx)
+                captcha_path = os.path.join(absolute_folder, "captcha_tmp.png")
 
-                captcha_texto = await resolver_captcha_imagen(captcha_path)
-                print(f"[Intento {intento}] Captcha resuelto:", captcha_texto)
+                if captcha_img:
+                    await captcha_img.screenshot(path=captcha_path)
+                else:
+                    await form_ctx.screenshot(path=captcha_path)
+
+                captcha_text = await resolver_captcha_imagen(captcha_path)
+
+                if not captcha_text:
+                    await form_ctx.wait_for_timeout(1200)
+                    continue
+
                 try:
-                    os.remove(captcha_path)
-                except Exception:
+                    await form_ctx.fill('input#Capcha_CaptchaTextBox', captcha_text)
+                except:
+                    await form_ctx.fill('input[name="Capcha$CaptchaTextBox"]', captcha_text)
+
+                # ───── Click y esperar popup ─────
+                try:
+                    async with pagina.expect_popup(timeout=8000) as pop:
+                        await form_ctx.click('input#btnConsultar')
+                    pagina_resultado = await pop.value
+                    await pagina_resultado.wait_for_load_state("networkidle")
+                    break
+                except:
+                    # si no hubo popup, revisar páginas
+                    pages = contexto.pages
+                    if len(pages) > 1:
+                        pagina_resultado = pages[-1]
+                        break
+
+            if pagina_resultado is None:
+                pagina_resultado = pagina
+
+            # =================================================================
+            #                      PDF + SCREENSHOT
+            # =================================================================
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_name = f"{nombre_sitio}_{cedula}_{timestamp}"
+
+            pdf_path = os.path.join(absolute_folder, f"{base_name}.pdf")
+            img_path = os.path.join(absolute_folder, f"{base_name}.png")
+            relative_path = os.path.join(relative_folder, f"{base_name}.png")
+
+            # Opcional: evitar generar artefactos pesados en pipelines (setear DISABLE_ARTIFACTS=true)
+            disable_artifacts = os.environ.get('DISABLE_ARTIFACTS', '').lower() in ['1','true','yes']
+            if not disable_artifacts:
+                try:
+                    await pagina_resultado.pdf(path=pdf_path, format="Letter")
+                except:
                     pass
 
-                # Esperar si abre popup
+            try:
+                # tomar screenshot más ligera cuando se pida (full_page puede ser lento)
+                full_page_flag = not os.environ.get('DISABLE_SCREENSHOT_FULLPAGE', '').lower() in ['1','true','yes']
+                if full_page_flag:
+                    await pagina_resultado.screenshot(path=img_path, full_page=True)
+                else:
+                    await pagina_resultado.screenshot(path=img_path, full_page=False)
+            except:
                 try:
-                    async with pagina.expect_popup() as popup_info:
-                        await pagina.fill('input[id="Capcha_CaptchaTextBox"]', captcha_texto)
-                        await pagina.click("input[type='submit']")
-                    nueva_pagina = await popup_info.value
-                    await nueva_pagina.wait_for_load_state("networkidle")
-                    pagina_resultado = nueva_pagina
+                    await pagina_resultado.screenshot(path=img_path)
                 except:
-                    # Si no hay popup, usamos la misma pestaña
-                    await pagina.wait_for_load_state("networkidle")
-                    pagina_resultado = pagina
+                    pass
 
-                # Verificar si el captcha fue incorrecto
-                if await pagina_resultado.locator('span#Capcha_ctl00').is_visible():
-                    texto_error = (await pagina_resultado.locator('span#Capcha_ctl00').inner_text()).strip()
-                    if "no es valido" in texto_error.lower():
-                        print(f"[Intento {intento}] Captcha incorrecto, reintentando...")
-                        # si quedó en popup, ciérralo para reintentar limpio
-                        try:
-                            if pagina_resultado is not pagina:
-                                await pagina_resultado.close()
-                        except Exception:
-                            pass
-                        continue
-
-                break  # Si todo fue bien, salimos del bucle
-            # ========= FIN BUCLE CAPTCHA =========
-
-            # Paths de screenshot
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            screenshot_name = f"{nombre_sitio}_{cedula}_{timestamp}.png"
-            absolute_path = os.path.join(absolute_folder, screenshot_name)
-            relative_path = os.path.join(relative_folder, screenshot_name)
-
-            # Captura de pantalla
-            await pagina_resultado.screenshot(path=absolute_path)
-            print("Captura guardada:", relative_path)
-
-            # ===== NUEVO: extraer mensaje y score del DOM (SIN tocar captcha) =====
-            mensaje_final, score_final = await _extraer_mensaje_y_score(pagina_resultado)
+            # =================================================================
+            #                    EXTRAER MENSAJE Y GUARDAR BD
+            # =================================================================
+            try:
+                mensaje_final, score_final = await _extraer_mensaje_y_score(pagina_resultado)
+            except:
+                mensaje_final, score_final = "Resultado obtenido.", 2
 
             await navegador.close()
 
-        # Persistir en BD con mensaje y score
-        await _crear_resultado_ok_con_score(consulta_id, fuente, relative_path, mensaje_final, score_final)
+        await _crear_resultado_ok_con_score(
+            consulta_id,
+            fuente,
+            relative_path,
+            mensaje_final,
+            score_final
+        )
 
     except Exception as e:
-        try:
-            fuente = await _get_fuente_by_nombre(nombre_sitio)
-        except Exception:
-            fuente = None
-        await _crear_resultado_error(consulta_id, fuente, str(e))
+        tb = traceback.format_exc()
+        fuente = await _get_fuente_by_nombre(nombre_sitio)
+        await _crear_resultado_error(consulta_id, fuente, str(e) + "\n" + tb)

@@ -65,8 +65,13 @@ def procesar_consulta(consulta_id, datos):
     bot_configs = get_bot_configs(consulta_id, datos)
 
     async def main_bots():
-        # ⬇️ Corre en paralelo por lotes (como antes)
-        for batch in chunked(bot_configs, 50):
+        # Corre en paralelo por lotes. Tamaño configurable vía env `BOT_BATCH_SIZE`.
+        try:
+            batch_size = int(os.environ.get('BOT_BATCH_SIZE', '10'))
+        except Exception:
+            batch_size = 10
+        print(f"[task] Ejecutando bots en lotes de tamaño={batch_size}")
+        for batch in chunked(bot_configs, batch_size):
             await asyncio.gather(*(run_bot(bot) for bot in batch))
 
     # Ejecutar bots (paralelo por lotes)

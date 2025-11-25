@@ -36,32 +36,42 @@ def generar_pdf_consolidado(resultados, consulta_id):
     pdf_merger.append(resumen_buffer)
 
     for r in resultados:
-        archivo = r["archivo"]
+        archivo = r.get("archivo")
         if not archivo:
             continue
         ext = os.path.splitext(archivo)[1].lower()
         try:
             if ext in [".png", ".jpg", ".jpeg"]:
-                img_buffer = io.BytesIO()
-                img = PILImage.open(archivo)
-                img.thumbnail((400, 400))
-                img.save(img_buffer, format="PNG")
-                img_buffer.seek(0)
-
-                # Crear PDF solo para la imagen
-                img_pdf_buffer = io.BytesIO()
-                img_doc = SimpleDocTemplate(img_pdf_buffer, pagesize=A4)
-                img_elements = [Paragraph(f"Fuente: {r['fuente']}", styles["Heading3"]),
-                                Spacer(1,10),
-                                Image(img_buffer),
-                                Spacer(1,20)]
-                img_doc.build(img_elements)
-                img_pdf_buffer.seek(0)
-                pdf_merger.append(img_pdf_buffer)
+                # Convertir la imagen directamente a PDF en memoria (más rápido que crear
+                # un documento ReportLab por cada imagen). Pillow permite guardar como PDF.
+                try:
+                    img = PILImage.open(archivo).convert("RGB")
+                    img_pdf_buffer = io.BytesIO()
+                    img.save(img_pdf_buffer, format="PDF", resolution=150)
+                    img_pdf_buffer.seek(0)
+                    pdf_merger.append(img_pdf_buffer)
+                except Exception:
+                    # Fallback: intentar abrir y anexar como imagen embebida con ReportLab
+                    img_buffer = io.BytesIO()
+                    img = PILImage.open(archivo)
+                    img.thumbnail((400, 400))
+                    img.save(img_buffer, format="PNG")
+                    img_buffer.seek(0)
+                    img_pdf_buffer = io.BytesIO()
+                    img_doc = SimpleDocTemplate(img_pdf_buffer, pagesize=A4)
+                    img_elements = [Paragraph(f"Fuente: {r.get('fuente')}", styles.get("Heading3", styles["Normal"])),
+                                    Spacer(1,10),
+                                    Image(img_buffer),
+                                    Spacer(1,20)]
+                    img_doc.build(img_elements)
+                    img_pdf_buffer.seek(0)
+                    pdf_merger.append(img_pdf_buffer)
 
             elif ext == ".pdf":
+                # Si ya es PDF, anexar directamente
                 pdf_merger.append(archivo)
-        except Exception as e:
+        except Exception:
+            # ignorar archivos problemáticos y continuar
             continue
 
     final_buffer = io.BytesIO()

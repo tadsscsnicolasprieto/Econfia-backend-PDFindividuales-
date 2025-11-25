@@ -1,0 +1,21 @@
+bot,test,status,function,signature,param_count,error,error_type,timestamp
+adb_sanctions,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+antecedentes_fiscales,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+bancoproveedores_quien_consulto,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+biologia_consulta,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+biologia_validacion_certificados,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+bis_dpl_legacy_pdf,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+bot_configs,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+bot_configs_contratista,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+bots_status_report,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+canada_sema_search_png,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+ccap_validate_identity,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+certificado_sena,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+certificado_sena_sofia,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:40:30.843551
+cnb_carnet_afiliacion,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+cnb_consulta_matriculados,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+colelectro_directorio,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.843551
+colpsic_validar_documento,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.844273
+colpsic_verificacion_tarjetas,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.844273
+compliance,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.844273
+conalpe_certificado,execution,FAIL,,,,"Consulta() got unexpected keyword arguments: 'cedula', 'tipo_documento', 'nombres', 'apellidos', 'em",TypeError,2025-11-25T13:40:30.844273

@@ -1,0 +1,16 @@
+bot,test,status,function,signature,param_count,error,error_type,timestamp
+adb_sanctions,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+antecedentes_fiscales,execution,PASS,consultar_antecedentes_fiscales,"(consulta_id, cedula: str, tipo_doc: str, tipo_persona: str)",4,,,2025-11-25T13:44:50.266526
+bancoproveedores_quien_consulto,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+biologia_consulta,execution,PASS,consultar_biologia_consulta,"(consulta_id: int, cedula: str)",2,,,2025-11-25T13:44:50.266526
+biologia_validacion_certificados,execution,PASS,consultar_biologia_validacion_certificados,"(consulta_id: int, codigo: str)",2,,,2025-11-25T13:44:50.266526
+bis_dpl_legacy_pdf,execution,PASS,consultar_bis_dpl_legacy_pdf,"(consulta_id: int, cedula: str)",2,,,2025-11-25T13:44:50.266526
+bot_configs,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+bot_configs_contratista,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+bots_status_report,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+canada_sema_search_png,execution,PASS,consultar_canada_sema_search_png,"(consulta_id: int, nombre: str, max_hits: int = 5)",3,,,2025-11-25T13:44:50.266526
+ccap_validate_identity,execution,PASS,consultar_ccap_validate_identity,"(consulta_id: int, numero: str)",2,,,2025-11-25T13:44:50.266526
+certificado_sena,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+certificado_sena_sofia,import,FAIL,,,,No se encontró función principal,,2025-11-25T13:44:50.266526
+cnb_carnet_afiliacion,execution,PASS,consultar_cnb_carnet_afiliacion,"(consulta_id: int, tipo_doc: str, numero: str)",3,,,2025-11-25T13:44:50.266526
+cnb_consulta_matriculados,execution,PASS,consultar_cnb_consulta_matriculados,"(consulta_id: int, numero: str)",2,,,2025-11-25T13:44:50.266526

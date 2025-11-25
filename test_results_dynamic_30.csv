@@ -1,0 +1,31 @@
+bot,test,status,function,signature,param_count,error,error_type,timestamp
+adb_sanctions,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+antecedentes_fiscales,execution,PASS,consultar_antecedentes_fiscales,"(consulta_id, cedula: str, tipo_doc: str, tipo_persona: str)",4,,,2025-11-25T14:10:06.938493
+bancoproveedores_quien_consulto,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+biologia_consulta,execution,PASS,consultar_biologia_consulta,"(consulta_id: int, cedula: str)",2,,,2025-11-25T14:10:06.938493
+biologia_validacion_certificados,execution,PASS,consultar_biologia_validacion_certificados,"(consulta_id: int, codigo: str)",2,,,2025-11-25T14:10:06.938493
+bis_dpl_legacy_pdf,execution,PASS,consultar_bis_dpl_legacy_pdf,"(consulta_id: int, cedula: str)",2,,,2025-11-25T14:10:06.938493
+bot_configs,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+bot_configs_contratista,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+bots_status_report,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+canada_sema_search_png,execution,PASS,consultar_canada_sema_search_png,"(consulta_id: int, nombre: str, max_hits: int = 5)",3,,,2025-11-25T14:10:06.938493
+ccap_validate_identity,execution,PASS,consultar_ccap_validate_identity,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.938493
+certificado_sena,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+certificado_sena_sofia,import,FAIL,,,,No se encontró función principal,,2025-11-25T14:10:06.938493
+cnb_carnet_afiliacion,execution,PASS,consultar_cnb_carnet_afiliacion,"(consulta_id: int, tipo_doc: str, numero: str)",3,,,2025-11-25T14:10:06.938493
+cnb_consulta_matriculados,execution,PASS,consultar_cnb_consulta_matriculados,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.938493
+colelectro_directorio,execution,PASS,consultar_colelectro_directorio,"(consulta_id: int, nombre: str, apellido: str)",3,,,2025-11-25T14:10:06.938493
+colpsic_validar_documento,execution,PASS,consultar_colpsic_validar_documento,"(consulta_id: int, numero: str, codigo: str)",3,,,2025-11-25T14:10:06.938493
+colpsic_verificacion_tarjetas,execution,PASS,consultar_colpsic_verificacion_tarjetas,"(consulta_id: int, numero: str, primer_nombre: str, primer_apellido: str)",4,,,2025-11-25T14:10:06.938493
+compliance,execution,PASS,consultar_compliance,"(nombre: str, consulta_id: int, cedula: str)",3,,,2025-11-25T14:10:06.938493
+conalpe_certificado,execution,PASS,consultar_conalpe_certificado,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.938493
+conalpe_consulta_inscritos,execution,PASS,consultar_conalpe_consulta_inscritos,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+conaltel_consulta_matriculados,execution,PASS,consultar_conaltel_consulta_matriculados,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+conpucol_certificados,execution,PASS,consultar_conpucol_certificados,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+conpucol_verificacion_colegiados,execution,PASS,consultar_conpucol_verificacion_colegiados,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+conte_consulta_matricula,execution,PASS,consultar_conte_consulta_matricula,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+conte_consulta_vigencia,execution,PASS,consultar_conte_consulta_vigencia,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+copnia_certificado,execution,PASS,consultar_copnia_certificado,"(consulta_id: int, cedula: str, tipo_doc: str)",3,,,2025-11-25T14:10:06.939546
+cp_certificado_busqueda,execution,PASS,consultar_cp_certificado_busqueda,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+cp_validar_certificado,execution,PASS,consultar_cp_validar_certificado,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546
+cp_validar_matricula,execution,PASS,consultar_cp_validar_matricula,"(consulta_id: int, numero: str)",2,,,2025-11-25T14:10:06.939546

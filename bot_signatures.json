@@ -1,0 +1,196 @@
+[
+  {
+    "bot": "adb_sanctions",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "antecedentes_fiscales",
+    "status": "OK",
+    "function": "consultar_antecedentes_fiscales",
+    "signature": "(consulta_id, cedula: str, tipo_doc: str, tipo_persona: str)",
+    "params": [
+      "consulta_id",
+      "cedula",
+      "tipo_doc",
+      "tipo_persona"
+    ],
+    "param_count": 4
+  },
+  {
+    "bot": "bancoproveedores_quien_consulto",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "biologia_consulta",
+    "status": "OK",
+    "function": "consultar_biologia_consulta",
+    "signature": "(consulta_id: int, cedula: str)",
+    "params": [
+      "consulta_id",
+      "cedula"
+    ],
+    "param_count": 2
+  },
+  {
+    "bot": "biologia_validacion_certificados",
+    "status": "OK",
+    "function": "consultar_biologia_validacion_certificados",
+    "signature": "(consulta_id: int, codigo: str)",
+    "params": [
+      "consulta_id",
+      "codigo"
+    ],
+    "param_count": 2
+  },
+  {
+    "bot": "bis_dpl_legacy_pdf",
+    "status": "OK",
+    "function": "consultar_bis_dpl_legacy_pdf",
+    "signature": "(consulta_id: int, cedula: str)",
+    "params": [
+      "consulta_id",
+      "cedula"
+    ],
+    "param_count": 2
+  },
+  {
+    "bot": "bot_configs",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "bot_configs_contratista",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "bots_status_report",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "canada_sema_search_png",
+    "status": "OK",
+    "function": "consultar_canada_sema_search_png",
+    "signature": "(consulta_id: int, nombre: str, max_hits: int = 5)",
+    "params": [
+      "consulta_id",
+      "nombre",
+      "max_hits"
+    ],
+    "param_count": 3
+  },
+  {
+    "bot": "ccap_validate_identity",
+    "status": "OK",
+    "function": "consultar_ccap_validate_identity",
+    "signature": "(consulta_id: int, numero: str)",
+    "params": [
+      "consulta_id",
+      "numero"
+    ],
+    "param_count": 2
+  },
+  {
+    "bot": "certificado_sena",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "certificado_sena_sofia",
+    "status": "NO_FUNC",
+    "signature": "",
+    "params": 0
+  },
+  {
+    "bot": "cnb_carnet_afiliacion",
+    "status": "OK",
+    "function": "consultar_cnb_carnet_afiliacion",
+    "signature": "(consulta_id: int, tipo_doc: str, numero: str)",
+    "params": [
+      "consulta_id",
+      "tipo_doc",
+      "numero"
+    ],
+    "param_count": 3
+  },
+  {
+    "bot": "cnb_consulta_matriculados",
+    "status": "OK",
+    "function": "consultar_cnb_consulta_matriculados",
+    "signature": "(consulta_id: int, numero: str)",
+    "params": [
+      "consulta_id",
+      "numero"
+    ],
+    "param_count": 2
+  },
+  {
+    "bot": "colelectro_directorio",
+    "status": "OK",
+    "function": "consultar_colelectro_directorio",
+    "signature": "(consulta_id: int, nombre: str, apellido: str)",
+    "params": [
+      "consulta_id",
+      "nombre",
+      "apellido"
+    ],
+    "param_count": 3
+  },
+  {
+    "bot": "colpsic_validar_documento",
+    "status": "OK",
+    "function": "consultar_colpsic_validar_documento",
+    "signature": "(consulta_id: int, numero: str, codigo: str)",
+    "params": [
+      "consulta_id",
+      "numero",
+      "codigo"
+    ],
+    "param_count": 3
+  },
+  {
+    "bot": "colpsic_verificacion_tarjetas",
+    "status": "OK",
+    "function": "consultar_colpsic_verificacion_tarjetas",
+    "signature": "(consulta_id: int, numero: str, primer_nombre: str, primer_apellido: str)",
+    "params": [
+      "consulta_id",
+      "numero",
+      "primer_nombre",
+      "primer_apellido"
+    ],
+    "param_count": 4
+  },
+  {
+    "bot": "compliance",
+    "status": "OK",
+    "function": "consultar_compliance",
+    "signature": "(nombre: str, consulta_id: int, cedula: str)",
+    "params": [
+      "nombre",
+      "consulta_id",
+      "cedula"
+    ],
+    "param_count": 3
+  },
+  {
+    "bot": "conalpe_certificado",
+    "status": "OK",
+    "function": "consultar_conalpe_certificado",
+    "signature": "(consulta_id: int, numero: str)",
+    "params": [
+      "consulta_id",
+      "numero"
+    ],
+    "param_count": 2
+  }
+]
