@@ -122,124 +122,118 @@ async def tomar_screenshot(pagina, consulta_id, cedula, suffix=""):
 
 # ============ SOLO 1 INTENTO, GUARDA SIEMPRE EVIDENCIA ============
 async def consultar_tyba(cedula, tipo_doc, nombre: str, apellido: str, consulta_id):
-    page = None
-    nav = None
-    screenshot_path = ""
-    try:
-        tipo_doc_val = TIPO_DOC_MAP.get((tipo_doc or "").upper(), "1")
-
-        async with async_playwright() as p:
-            nav = await p.chromium.launch(headless=True)
-            page = await nav.new_page()
-            await page.goto(url, timeout=60000)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=8000)
-            except Exception:
-                pass
-
-            # 1) Pestaña "Ciudadano"
-            try:
-                await page.click(SEL_TAB_CIUDAD, timeout=4000)
-            except Exception:
+    for intento in range(3):
+        page = None
+        nav = None
+        screenshot_path = ""
+        try:
+            tipo_doc_val = TIPO_DOC_MAP.get((tipo_doc or "").upper(), "1")
+            async with async_playwright() as p:
+                nav = await p.chromium.launch(headless=True)
+                page = await nav.new_page()
+                await page.goto(url, timeout=60000)
                 try:
-                    await page.click("li#tabCiudadano", timeout=1500)
+                    await page.wait_for_load_state("networkidle", timeout=8000)
                 except Exception:
                     pass
-            await page.wait_for_timeout(300)
-
-            # 2) Campos
-            await page.wait_for_selector(SEL_TIPO_DOC, timeout=8000)
-            await page.wait_for_selector(SEL_NUMERO, timeout=8000)
-
-            # 3) Llenar
-            await page.select_option(SEL_TIPO_DOC, value=tipo_doc_val)
-            await page.fill(SEL_NUMERO, str(cedula))
-
-            # 4) reCAPTCHA invisible si existe
-            await _solve_recaptcha_invisible(page)
-
-            # 5) Submit: Enter y fallback botón
-            try:
-                await page.focus(SEL_NUMERO)
-                await page.keyboard.press("Enter")
-            except Exception:
-                pass
-            try:
-                await page.click(SEL_BTN_CONSULTAR, timeout=2000)
-            except Exception:
-                pass
-
-            # 6) Espera de resultado
-            kind, payload = await _wait_result_or_alert(page, timeout_ms=22000)
-
-            # centrar alerta para el pantallazo
-            if kind == "alert" and await page.locator(SEL_ALERT_WRAP).count():
+                # 1) Pestaña "Ciudadano"
                 try:
-                    el = await page.locator(SEL_ALERT_WRAP).element_handle()
-                    if el:
-                        await page.evaluate("el => el.scrollIntoView({block:'center'})", el)
+                    await page.click(SEL_TAB_CIUDAD, timeout=4000)
+                except Exception:
+                    try:
+                        await page.click("li#tabCiudadano", timeout=1500)
+                    except Exception:
+                        pass
+                await page.wait_for_timeout(300)
+                # 2) Campos
+                await page.wait_for_selector(SEL_TIPO_DOC, timeout=8000)
+                await page.wait_for_selector(SEL_NUMERO, timeout=8000)
+                # 3) Llenar
+                await page.select_option(SEL_TIPO_DOC, value=tipo_doc_val)
+                await page.fill(SEL_NUMERO, str(cedula))
+                # 4) reCAPTCHA invisible si existe
+                await _solve_recaptcha_invisible(page)
+                # 5) Submit: Enter y fallback botón
+                try:
+                    await page.focus(SEL_NUMERO)
+                    await page.keyboard.press("Enter")
                 except Exception:
                     pass
-
-            # 7) Evidencia y guardado
-            screenshot_path = await tomar_screenshot(page, consulta_id, cedula)
-            fuente_obj = await get_fuente(nombre_sitio)
-
-            if kind == "alert":
-                msg = (payload or "").strip()
-                if NO_ROWS_RE.search(msg):
-                    msg_out = "No se encontraron registros."
+                try:
+                    await page.click(SEL_BTN_CONSULTAR, timeout=2000)
+                except Exception:
+                    pass
+                # 6) Espera de resultado
+                kind, payload = await _wait_result_or_alert(page, timeout_ms=22000)
+                # centrar alerta para el pantallazo
+                if kind == "alert" and await page.locator(SEL_ALERT_WRAP).count():
+                    try:
+                        el = await page.locator(SEL_ALERT_WRAP).element_handle()
+                        if el:
+                            await page.evaluate("el => el.scrollIntoView({block:'center'})", el)
+                    except Exception:
+                        pass
+                # 7) Evidencia y guardado
+                screenshot_path = await tomar_screenshot(page, consulta_id, cedula)
+                fuente_obj = await get_fuente(nombre_sitio)
+                if kind == "alert":
+                    msg = (payload or "").strip()
+                    if NO_ROWS_RE.search(msg):
+                        msg_out = "No se encontraron registros."
+                        if fuente_obj:
+                            await guardar_resultado(
+                                consulta_id=consulta_id, fuente=fuente_obj,
+                                score=0, estado="Validado",
+                                mensaje=msg_out, archivo=screenshot_path
+                            )
+                    else:
+                        if fuente_obj:
+                            await guardar_resultado(
+                                consulta_id=consulta_id, fuente=fuente_obj,
+                                score=0, estado="Validado",
+                                mensaje=msg or "Aviso mostrado por la fuente",
+                                archivo=screenshot_path
+                            )
+                elif kind == "results":
                     if fuente_obj:
                         await guardar_resultado(
                             consulta_id=consulta_id, fuente=fuente_obj,
-                            score=0, estado="Validado",
-                            mensaje=msg_out, archivo=screenshot_path
-                        )
-                else:
-                    if fuente_obj:
-                        await guardar_resultado(
-                            consulta_id=consulta_id, fuente=fuente_obj,
-                            score=0, estado="Validado",
-                            mensaje=msg or "Aviso mostrado por la fuente",
+                            score=10, estado="Validado",
+                            mensaje="Se han encontrado registros",
                             archivo=screenshot_path
                         )
-
-            elif kind == "results":
-                if fuente_obj:
-                    await guardar_resultado(
-                        consulta_id=consulta_id, fuente=fuente_obj,
-                        score=10, estado="Validado",
-                        mensaje="Se han encontrado registros",
-                        archivo=screenshot_path
-                    )
-            else:
-                # No pudimos confirmar nada
-                if fuente_obj:
-                    await guardar_resultado(
-                        consulta_id=consulta_id, fuente=fuente_obj,
-                        score=0, estado="Sin validar",
-                        mensaje="No fue posible confirmar el resultado (timeout)",
-                        archivo=screenshot_path
-                    )
-
-    except Exception as e:
-        # Evidencia en error
-        try:
-            if page and not screenshot_path:
-                screenshot_path = await tomar_screenshot(page, consulta_id, cedula, suffix="_error")
-        except Exception:
-            pass
-        fuente_obj = await get_fuente(nombre_sitio)
-        if fuente_obj:
-            await guardar_resultado(
-                consulta_id=consulta_id, fuente=fuente_obj,
-                score=0, estado="Sin validar",
-                mensaje=f"Ocurrió un error al intentar validar la fuente: {e}",
-                archivo=screenshot_path or ""
-            )
-    finally:
-        try:
-            if nav:
-                await nav.close()
-        except Exception:
-            pass
+                else:
+                    # No pudimos confirmar nada
+                    if fuente_obj:
+                        await guardar_resultado(
+                            consulta_id=consulta_id, fuente=fuente_obj,
+                            score=0, estado="Sin validar",
+                            mensaje="No fue posible confirmar el resultado (timeout)",
+                            archivo=screenshot_path
+                        )
+            # Si todo sale bien, salimos del bucle
+            break
+        except Exception as e:
+            # Evidencia en error
+            try:
+                if page and not screenshot_path:
+                    screenshot_path = await tomar_screenshot(page, consulta_id, cedula, suffix="_error")
+            except Exception:
+                pass
+            fuente_obj = await get_fuente(nombre_sitio)
+            if fuente_obj:
+                await guardar_resultado(
+                    consulta_id=consulta_id, fuente=fuente_obj,
+                    score=0, estado="Sin validar",
+                    mensaje=f"Ocurrió un error al intentar validar la fuente: {e}",
+                    archivo=screenshot_path or ""
+                )
+            # Si es el último intento, no hacemos nada más
+            if intento == 2:
+                break
+        finally:
+            try:
+                if nav:
+                    await nav.close()
+            except Exception:
+                pass

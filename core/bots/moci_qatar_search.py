@@ -8,28 +8,28 @@ from playwright.async_api import async_playwright
 
 from core.models import Resultado, Fuente
 
-NOMBRE_SITIO = "moci_qatar_search"  # Asegúrate de tener esta Fuente creada en BD
+NOMBRE_SITIO = "moci_qatar_search"
 URL_SEARCH   = "https://www.moci.gov.qa/en/?s={q}"
 GOTO_TIMEOUT_MS = 180_000
 
-# Selectores (WordPress típico)
-SEL_NORES_H1   = "h1.page-title"                  # "Nothing Found"
-SEL_RESULTS_CT = "main, #main, .site-main"        # contenedor general
-SEL_ARTICLE    = "article[id^='post-']"           # cada resultado
+# Selectores
+SEL_NORES_H1   = "h1.page-title"
+SEL_RESULTS_CT = "main, #main, .site-main"
+SEL_ARTICLE    = "article[id^='post-']"
 SEL_TITLE_A    = f"{SEL_ARTICLE} h2 a, {SEL_ARTICLE} .entry-title a"
 
 def _norm(s: str) -> str:
-    """Normaliza: trim, lower, sin tildes, comprime espacios."""
     s = (s or "").strip().lower()
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
     s = re.sub(r"\s+", " ", s)
     return s
 
+
 async def consultar_moci_qatar_search(consulta_id: int, nombre: str, apellido: str):
     navegador = None
     full_name = f"{(nombre or '').strip()} {(apellido or '').strip()}".strip()
 
-    # 1) Fuente
+    # 1) Validación de fuente
     try:
         fuente_obj = await sync_to_async(Fuente.objects.get)(nombre=NOMBRE_SITIO)
     except Exception as e:
@@ -64,51 +64,85 @@ async def consultar_moci_qatar_search(consulta_id: int, nombre: str, apellido: s
     mensaje_final = "No hay coincidencias."
     score_final = 1
     success = False
-    last_error = None
 
     norm_query = _norm(full_name)
 
     try:
         async with async_playwright() as p:
+            # --- 3) Lanzar navegador con fingerprint humano ---
             navegador = await p.chromium.launch(
-                headless=True,  # visual
-                args=["--disable-blink-features=AutomationControlled"]
+                headless=False,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-web-security",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--disable-gpu",
+                    "--no-sandbox",
+                ],
+                proxy={
+                    "server": "http://USER:PASS@IP_PROXY:PUERTO"  # CAMBIAR AQUÍ
+                }
             )
+
             context = await navegador.new_context(
-                viewport={"width": 1400, "height": 900},
+                viewport={"width": 1440, "height": 900},
                 locale="en-US",
-                timezone_id="America/Bogota",
+                timezone_id="Asia/Qatar",
+                java_script_enabled=True,
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Referer": "https://www.google.com/",
+                    "DNT": "1",
+                }
             )
+
             page = await context.new_page()
 
-            # 3) Ir a la URL de búsqueda
+            # Anti-bot - eliminar señales de automatización
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            """)
+
+            # Construir URL real
             q = urllib.parse.quote_plus(full_name)
             search_url = URL_SEARCH.format(q=q)
-            await page.goto(search_url, timeout=GOTO_TIMEOUT_MS)
-            await page.wait_for_load_state("domcontentloaded", timeout=60_000)
+
+            # --- 4) Navegar una sola vez ---
             try:
-                await page.wait_for_load_state("networkidle", timeout=30_000)
-            except Exception:
+                await page.goto(search_url, timeout=180000, wait_until="domcontentloaded")
+                await page.wait_for_load_state("networkidle", timeout=60000)
+            except:
                 pass
 
-            # 4) Detectar "Nothing Found"
+            # Guardar HTML recibido para depuración
+            html_path = os.path.join(absolute_folder, f"{NOMBRE_SITIO}_{safe_name}_{ts}.html")
+            try:
+                html_content = await page.content()
+                with open(html_path, "w", encoding="utf-8") as f:
+                    f.write(html_content)
+            except Exception as e:
+                print("No se pudo guardar el HTML:", e)
+
+            # Tiempo anti-WAF (muy importante)
+            await page.wait_for_timeout(4000)
+
+            # --- 5) Lógica de resultados ---
             nores_h1 = page.locator(SEL_NORES_H1, has_text="Nothing Found")
+
             if await nores_h1.count() > 0 and await nores_h1.first.is_visible():
-                try:
-                    # toma el texto exacto del H1 como mensaje
-                    mensaje_final = (await nores_h1.first.inner_text()).strip()
-                except Exception:
-                    mensaje_final = "Nothing Found"
-                try:
-                    await page.screenshot(path=absolute_png, full_page=True)
-                except Exception:
-                    pass
-                success = True  # consulta válida sin hallazgos (score 1)
+                mensaje_final = (await nores_h1.first.inner_text()).strip()
+                score_final = 1
+                success = True
 
             else:
-                # 5) Hay resultados: iterar artículos <article id="post-...">
-                results_container = page.locator(SEL_RESULTS_CT)
-                # si no hay contenedor, igual buscamos por artículos
                 articles = page.locator(SEL_ARTICLE)
                 n = await articles.count()
                 exact_hit = False
@@ -116,8 +150,8 @@ async def consultar_moci_qatar_search(consulta_id: int, nombre: str, apellido: s
                 for i in range(n):
                     art = articles.nth(i)
                     try:
-                        title = (await art.locator(SEL_TITLE_A).first.inner_text(timeout=3_000)).strip()
-                    except Exception:
+                        title = (await art.locator(SEL_TITLE_A).first.inner_text(timeout=3000)).strip()
+                    except:
                         title = ""
 
                     if title and _norm(title) == norm_query:
@@ -131,20 +165,20 @@ async def consultar_moci_qatar_search(consulta_id: int, nombre: str, apellido: s
                     score_final = 1
                     mensaje_final = "Se encontraron resultados, pero sin coincidencia exacta del nombre."
 
-                try:
-                    await page.screenshot(path=absolute_png, full_page=True)
-                except Exception:
-                    pass
                 success = True
 
-            # 6) Cierre de navegador
+            # --- 6) Screenshot final ---
+            try:
+                await page.screenshot(path=absolute_png, full_page=True)
+            except:
+                pass
+
             try:
                 await navegador.close()
-            except Exception:
+            except:
                 pass
-            navegador = None
 
-        # 7) Persistencia del Resultado
+        # --- 7) Guardar resultado ---
         if success:
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id, fuente=fuente_obj,
@@ -157,7 +191,7 @@ async def consultar_moci_qatar_search(consulta_id: int, nombre: str, apellido: s
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id, fuente=fuente_obj,
                 score=1, estado="Sin Validar",
-                mensaje=last_error or "No fue posible obtener resultados.",
+                mensaje="No fue posible obtener resultados.",
                 archivo=relative_png
             )
 
@@ -172,5 +206,5 @@ async def consultar_moci_qatar_search(consulta_id: int, nombre: str, apellido: s
             try:
                 if navegador is not None:
                     await navegador.close()
-            except Exception:
+            except:
                 pass

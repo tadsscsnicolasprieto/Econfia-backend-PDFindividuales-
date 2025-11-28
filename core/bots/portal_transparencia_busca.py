@@ -9,7 +9,13 @@ from playwright.async_api import async_playwright
 from core.models import Resultado, Fuente
 
 NOMBRE_SITIO = "portal_transparencia_busca"  # agrega en tu tabla Fuente
-URL_SEARCH   = "https://portaldatransparencia.gov.br/busca?termo={q}"
+
+# Se probarán ambos dominios para reducir bloqueos CloudFront/WAF
+BASE_DOMAINS = [
+    "https://www.portaldatransparencia.gov.br",
+    "https://portaldatransparencia.gov.br",
+]
+PATH_SEARCH = "/busca?termo={q}"
 GOTO_TIMEOUT_MS = 180_000
 
 # Cookies
@@ -30,6 +36,25 @@ SEL_ITEM_TITLE_CANDS = [
     "h2", "h3", "h4",
     "strong", ".titulo", ".title", ".nome", ".busca-portal-text-1", "header"
 ]
+
+# Anti bloqueo: UA y headers realistas
+REALISTIC_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+)
+EXTRA_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+def _is_cloudfront_block(html: str) -> bool:
+    if not html:
+        return False
+    h = html.lower()
+    return "403 error" in h and "cloudfront" in h and "request blocked" in h
 
 def _norm(s: str) -> str:
     """Normaliza texto para comparación exacta: minúsculas, sin tildes, espacios comprimidos."""
@@ -85,37 +110,78 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
         async with async_playwright() as p:
             navegador = await p.chromium.launch(
                 headless=True,
-                args=["--disable-blink-features=AutomationControlled"]
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
             )
             context = await navegador.new_context(
                 viewport={"width": 1400, "height": 900},
                 locale="pt-BR",
                 timezone_id="America/Bogota",
+                user_agent=REALISTIC_UA,
+                extra_http_headers=EXTRA_HEADERS,
+            )
+            await context.add_init_script(
+                """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                """
             )
             page = await context.new_page()
 
-            # 3) Ir directo a la búsqueda por URL
+            # 3) Intentar búsqueda en ambos dominios con detección de bloqueo
             q = urllib.parse.quote_plus(full_name)
-            url = URL_SEARCH.format(q=q)
-            await page.goto(url, timeout=GOTO_TIMEOUT_MS)
-            await page.wait_for_load_state("domcontentloaded", timeout=60_000)
-
-            # 4) Aceptar cookies si aparece (puede salir repetida)
-            for _ in range(3):
+            search_html = ""
+            search_loaded = False
+            for base in BASE_DOMAINS:
+                url = base + PATH_SEARCH.format(q=q)
                 try:
-                    btn = page.locator(SEL_COOKIE_BTN)
-                    if await btn.count() > 0 and await btn.first.is_visible():
-                        await btn.first.click(timeout=5_000)
-                        await page.wait_for_timeout(400)
-                    else:
+                    resp = await page.goto(url, timeout=GOTO_TIMEOUT_MS)
+                    await page.wait_for_load_state("domcontentloaded", timeout=60_000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=30_000)
+                    except Exception:
+                        pass
+                    # Cookies
+                    for _ in range(3):
+                        try:
+                            btn = page.locator(SEL_COOKIE_BTN)
+                            if await btn.count() > 0 and await btn.first.is_visible():
+                                await btn.first.click(timeout=5_000)
+                                await page.wait_for_timeout(350)
+                            else:
+                                break
+                        except Exception:
+                            break
+                    search_html = await page.content()
+                    status_ok = resp and resp.status == 200
+                    if status_ok and not _is_cloudfront_block(search_html):
+                        search_loaded = True
                         break
-                except Exception:
-                    break
+                except Exception as ex:
+                    last_error = str(ex)
+                    continue
 
-            try:
-                await page.wait_for_load_state("networkidle", timeout=30_000)
-            except Exception:
-                pass
+            if not search_loaded and _is_cloudfront_block(search_html):
+                mensaje_final = "Bloqueado por CloudFront/WAF (403). Reintentos fallidos."
+                try:
+                    await page.screenshot(path=absolute_png, full_page=True)
+                except Exception:
+                    pass
+                success = True
+                score_final = 1
+                try:
+                    await navegador.close()
+                except Exception:
+                    pass
+                navegador = None
+                await sync_to_async(Resultado.objects.create)(
+                    consulta_id=consulta_id, fuente=fuente_obj,
+                    score=score_final, estado="Validada",
+                    mensaje=mensaje_final, archivo=relative_png
+                )
+                return
 
             # 5) Leer el encabezado resumen (si existe)
             h3 = page.locator(SEL_H3_SUMMARY).first
