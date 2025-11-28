@@ -179,7 +179,7 @@ STATIC_ROOT = "/srv/econfia/static"
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / "media"
-
+TWOCAPTCHA_API_KEY="TU_API_KEY_2CAPTCHA"
 #EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 #EMAIL_HOST = "mail.econfia.co"
 #EMAIL_PORT = 465
@@ -196,3 +196,4 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "econfia18@gmail.com"
 EMAIL_HOST_PASSWORD = "diyb mzdr qhqy banj"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+

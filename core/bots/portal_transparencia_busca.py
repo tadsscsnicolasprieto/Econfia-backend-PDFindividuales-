@@ -1,48 +1,87 @@
 # bots/portal_transparencia_busca.py
-import os, re, unicodedata, urllib.parse
+import os
+import re
+import unicodedata
+import urllib.parse
+import asyncio
+import logging
 from datetime import datetime
+from typing import Optional
 
 from django.conf import settings
 from asgiref.sync import sync_to_async
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Page
 
 from core.models import Resultado, Fuente
 
-NOMBRE_SITIO = "portal_transparencia_busca"  # agrega en tu tabla Fuente
-URL_SEARCH   = "https://portaldatransparencia.gov.br/busca?termo={q}"
+logger = logging.getLogger(__name__)
+
+NOMBRE_SITIO = "portal_transparencia_busca"
+URL_SEARCH = "https://portaldatransparencia.gov.br/busca?termo={q}"
 GOTO_TIMEOUT_MS = 180_000
 
-# Cookies
+# Selectores
 SEL_COOKIE_BTN = "#accept-all-btn"
-
-# Encabezado que muestra "Aproximadamente X resultados..."
 SEL_H3_SUMMARY = "h3.busca-portal-title-text-1.busca-portal-dmb-10"
-SEL_COUNT      = "#countResultados"   # dentro del H3
-SEL_TERM       = "#infoTermo"         # dentro del H3
+SEL_COUNT = "#countResultados"
+SEL_TERM = "#infoTermo"
+SEL_LIST = "ul#resultados.lista-resultados"
+SEL_ITEM = f"{SEL_LIST} .busca-portal-block-searchs__item"
 
-# Lista de resultados e items
-SEL_LIST  = "ul#resultados.lista-resultados"
-SEL_ITEM  = f"{SEL_LIST} .busca-portal-block-searchs__item"
-
-# Candidatos de título/nombre dentro de cada item
 SEL_ITEM_TITLE_CANDS = [
     "h2 a", "h3 a", "a[title]", "a",
     "h2", "h3", "h4",
     "strong", ".titulo", ".title", ".nome", ".busca-portal-text-1", "header"
 ]
 
+
 def _norm(s: str) -> str:
-    """Normaliza texto para comparación exacta: minúsculas, sin tildes, espacios comprimidos."""
+    """Normaliza texto para comparación exacta."""
     s = (s or "").strip().lower()
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
-    s = re.sub(r"\s+", " ", s)
-    return s
+    return re.sub(r"\s+", " ", s)
+
+
+async def safe_goto(page: Page, url: str, folder: str, prefix: str, timeout: int = GOTO_TIMEOUT_MS, attempts: int = 3):
+    """
+    Navega con reintentos y guarda HTML si hay 403 u otros errores.
+    Devuelve la Response si tuvo éxito.
+    """
+    last_exc: Optional[Exception] = None
+    delay = 1.0
+    for i in range(1, attempts + 1):
+        try:
+            resp = await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+            status = resp.status if resp else None
+            if status == 403:
+                # guardar body para inspección
+                try:
+                    body = await resp.text()
+                    path = os.path.join(folder, f"{prefix}_403_{i}.html")
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(body)
+                except Exception:
+                    pass
+                last_exc = Exception(f"HTTP 403 en intento {i}")
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            return resp
+        except Exception as e:
+            last_exc = e
+            await asyncio.sleep(delay)
+            delay *= 2
+    raise last_exc
+
 
 async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, apellido: str):
+    """
+    Busca por nombre en portaldatransparencia.gov.br y guarda Resultado con captura.
+    """
     navegador = None
     full_name = f"{(nombre or '').strip()} {(apellido or '').strip()}".strip()
 
-    # 1) Fuente
+    # obtener Fuente
     try:
         fuente_obj = await sync_to_async(Fuente.objects.get)(nombre=NOMBRE_SITIO)
     except Exception as e:
@@ -63,7 +102,7 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
         )
         return
 
-    # 2) Carpeta / archivo
+    # preparar carpeta y nombres
     relative_folder = os.path.join("resultados", str(consulta_id))
     absolute_folder = os.path.join(settings.MEDIA_ROOT, relative_folder)
     os.makedirs(absolute_folder, exist_ok=True)
@@ -77,30 +116,71 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
     mensaje_final = "No hay coincidencias."
     success = False
     score_final = 1
-    last_error = None
-
     norm_query = _norm(full_name)
 
     try:
         async with async_playwright() as p:
+            # lanzar navegador con opciones stealth básicas
             navegador = await p.chromium.launch(
                 headless=True,
-                args=["--disable-blink-features=AutomationControlled"]
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
             )
+
+            # cabeceras y user-agent realista
+            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            extra_headers = {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "pt-BR,pt;q=0.9,es-419;q=0.8,es;q=0.7,en;q=0.6",
+                "Referer": "https://www.google.com/",
+            }
+
             context = await navegador.new_context(
                 viewport={"width": 1400, "height": 900},
                 locale="pt-BR",
                 timezone_id="America/Bogota",
+                user_agent=ua,
+                extra_http_headers=extra_headers,
+                ignore_https_errors=True,
             )
+
+            # pequeño stealth patch
+            try:
+                await context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    window.navigator.chrome = { runtime: {} };
+                    Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR','pt','en'] });
+                """)
+            except Exception:
+                pass
+
             page = await context.new_page()
 
-            # 3) Ir directo a la búsqueda por URL
+            # 1) Ir directo a la búsqueda por URL
             q = urllib.parse.quote_plus(full_name)
             url = URL_SEARCH.format(q=q)
-            await page.goto(url, timeout=GOTO_TIMEOUT_MS)
-            await page.wait_for_load_state("domcontentloaded", timeout=60_000)
 
-            # 4) Aceptar cookies si aparece (puede salir repetida)
+            try:
+                await safe_goto(page, url, absolute_folder, f"search_{ts}")
+                await page.wait_for_load_state("domcontentloaded", timeout=60_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=30_000)
+                except Exception:
+                    pass
+            except Exception as e:
+                # guardar HTML y screenshot para diagnóstico
+                try:
+                    html = await page.content()
+                    with open(os.path.join(absolute_folder, f"search_html_{ts}.html"), "w", encoding="utf-8") as fh:
+                        fh.write(html)
+                except Exception:
+                    pass
+                try:
+                    await page.screenshot(path=absolute_png, full_page=True)
+                except Exception:
+                    pass
+                raise
+
+            # 2) Aceptar cookies si aparece
             for _ in range(3):
                 try:
                     btn = page.locator(SEL_COOKIE_BTN)
@@ -112,12 +192,7 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
                 except Exception:
                     break
 
-            try:
-                await page.wait_for_load_state("networkidle", timeout=30_000)
-            except Exception:
-                pass
-
-            # 5) Leer el encabezado resumen (si existe)
+            # 3) Leer encabezado resumen
             h3 = page.locator(SEL_H3_SUMMARY).first
             h3_text = ""
             count_text = ""
@@ -134,7 +209,7 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
             except Exception:
                 pass
 
-            # 6) Si el contador dice 0 -> usamos h3 como mensaje y score=1
+            # 4) Si contador es 0 -> guardar y salir
             if (count_text or "").strip() == "0":
                 mensaje_final = h3_text or f"Aproximadamente 0 resultados encontrados para {term_text}"
                 try:
@@ -144,7 +219,7 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
                 success = True
 
             else:
-                # 7) Iterar resultados y buscar coincidencia exacta del nombre
+                # 5) Iterar resultados y buscar coincidencia exacta
                 items = page.locator(SEL_ITEM)
                 n = await items.count()
                 exact = False
@@ -153,10 +228,10 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
                     it = items.nth(i)
                     item_title = ""
 
-                    # probar candidatos
+                    # probar candidatos de título
                     for sel in SEL_ITEM_TITLE_CANDS:
-                        loc = it.locator(sel).first
                         try:
+                            loc = it.locator(sel).first
                             if await loc.count() > 0 and await loc.is_visible():
                                 item_title = (await loc.inner_text(timeout=2000)).strip()
                                 if item_title:
@@ -165,7 +240,6 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
                             continue
 
                     if not item_title:
-                        # fallback: todo el texto del item
                         try:
                             item_title = (await it.inner_text(timeout=2000)).strip()
                         except Exception:
@@ -192,14 +266,14 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
 
                 success = True
 
-            # 8) Cerrar navegador
+            # 6) Cerrar navegador
             try:
                 await navegador.close()
             except Exception:
                 pass
             navegador = None
 
-        # 9) Guardar Resultado
+        # 7) Persistir Resultado
         if success:
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id, fuente=fuente_obj,
@@ -210,11 +284,12 @@ async def consultar_portal_transparencia_busca(consulta_id: int, nombre: str, ap
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id, fuente=fuente_obj,
                 score=1, estado="Sin Validar",
-                mensaje=last_error or "No fue posible obtener resultados.",
+                mensaje="No fue posible obtener resultados.",
                 archivo=relative_png
             )
 
     except Exception as e:
+        # guardar error y cerrar navegador si está abierto
         try:
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id, fuente=fuente_obj,

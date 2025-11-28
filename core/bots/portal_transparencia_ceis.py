@@ -1,5 +1,10 @@
 # bots/portal_transparencia_ceis.py
-import os, re, urllib.parse, unicodedata
+import os
+import re
+import urllib.parse
+import unicodedata
+import asyncio
+import logging
 from datetime import datetime
 
 from django.conf import settings
@@ -8,37 +13,62 @@ from playwright.async_api import async_playwright
 
 from core.models import Resultado, Fuente
 
-NOMBRE_SITIO = "portal_transparencia_ceis"  # crea/asegura esta Fuente en BD
+logger = logging.getLogger(__name__)
+
+NOMBRE_SITIO = "portal_transparencia_ceis"
 
 URL_DATASET = "https://portaldatransparencia.gov.br/entenda-a-gestao-publica/ceis"
-URL_SEARCH  = "https://portaldatransparencia.gov.br/busca?termo={q}"
+URL_SEARCH = "https://portaldatransparencia.gov.br/busca?termo={q}"
 
 GOTO_TIMEOUT_MS = 180_000
 
-# Cookies
-SEL_COOKIE_BTN  = "#accept-all-btn"
+# Selectores
+SEL_COOKIE_BTN = "#accept-all-btn"
+SEL_ZERO_H3 = "h3.busca-portal-title-text-1.busca-portal-dmb-10"
+SEL_LIST = "ul#resultados.lista-resultados"
+SEL_ITEM = f"{SEL_LIST} .busca-portal-block-searchs__item"
 
-# "0 resultados" (mismo patrón del portal)
-SEL_ZERO_H3     = "h3.busca-portal-title-text-1.busca-portal-dmb-10"
-# ejemplo HTML:
-# <h3 ...><strong> Aproximadamente <strong id="countResultados">0</strong> resultados encontrados</strong> para
-#   <span id="infoTermo">jaider leonardo barrera chacon</span></h3>
-
-# Lista y items de resultados
-SEL_LIST        = "ul#resultados.lista-resultados"
-SEL_ITEM        = f"{SEL_LIST} .busca-portal-block-searchs__item"
-
-# Candidatos para extraer el “nombre/título” dentro del item (robusto ante cambios)
 SEL_ITEM_TITLE_CANDIDATES = [
     "a[title]", "a", "h2", "h3", "h4",
     ".titulo", ".title", ".nome",
     "strong", "header"
 ]
 
+
 def _norm(s: str) -> str:
     s = (s or "").strip().lower()
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
     return re.sub(r"\s+", " ", s)
+
+
+async def safe_goto(page, url, folder, prefix, timeout=GOTO_TIMEOUT_MS, attempts=3):
+    """Navega con reintentos y guarda HTML si hay 403 u otros errores."""
+    last_exc = None
+    delay = 1.0
+    for i in range(1, attempts + 1):
+        try:
+            resp = await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+            status = resp.status if resp else None
+            if status == 403:
+                # guardar body para inspección
+                try:
+                    body = await resp.text()
+                    path = os.path.join(folder, f"{prefix}_403_{i}.html")
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(body)
+                except Exception:
+                    pass
+                last_exc = Exception(f"HTTP 403 en intento {i}")
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            return resp
+        except Exception as e:
+            last_exc = e
+            await asyncio.sleep(delay)
+            delay *= 2
+    raise last_exc
+
 
 async def consultar_portal_transparencia_ceis(consulta_id: int, nombre: str, apellido: str):
     navegador = None
@@ -83,45 +113,93 @@ async def consultar_portal_transparencia_ceis(consulta_id: int, nombre: str, ape
 
     try:
         async with async_playwright() as p:
+            # lanzar navegador con opciones que reduzcan detección
             navegador = await p.chromium.launch(
-                headless=True,  # visible
-                args=["--disable-blink-features=AutomationControlled"]
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
             )
+
+            # cabeceras y user-agent realista
+            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            extra_headers = {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "pt-BR,pt;q=0.9,es-419;q=0.8,es;q=0.7,en;q=0.6",
+                "Referer": "https://www.google.com/",
+            }
+
             context = await navegador.new_context(
                 viewport={"width": 1400, "height": 900},
                 locale="pt-BR",
                 timezone_id="America/Bogota",
+                user_agent=ua,
+                extra_http_headers=extra_headers,
+                ignore_https_errors=True,
             )
+
+            # pequeño stealth patch
+            try:
+                await context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    window.navigator.chrome = { runtime: {} };
+                    Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR','pt','en'] });
+                """)
+            except Exception:
+                pass
+
             page = await context.new_page()
 
             # 3) Visitar la página del CEIS para disparar cookies y aceptarlas
             try:
-                await page.goto(URL_DATASET, timeout=GOTO_TIMEOUT_MS)
+                await safe_goto(page, URL_DATASET, absolute_folder, f"dataset_{ts}")
                 await page.wait_for_load_state("domcontentloaded", timeout=60_000)
                 for _ in range(3):
-                    btn = page.locator(SEL_COOKIE_BTN)
-                    if await btn.count() > 0 and await btn.first.is_visible():
-                        try:
+                    try:
+                        btn = page.locator(SEL_COOKIE_BTN)
+                        if await btn.count() > 0 and await btn.first.is_visible():
                             await btn.first.click(timeout=5_000)
                             await page.wait_for_timeout(600)
-                        except Exception:
-                            pass
-                    else:
+                        else:
+                            break
+                    except Exception:
                         break
             except Exception:
-                pass
+                # guardar screenshot para diagnóstico y continuar al intento de búsqueda
+                try:
+                    await page.screenshot(path=absolute_png, full_page=True)
+                except Exception:
+                    pass
+                # re-raise para que el bloque exterior lo capture y registre
+                raise
 
             # 4) Ir a la búsqueda por URL con el nombre completo
             q = urllib.parse.quote_plus(full_name)
             search_url = URL_SEARCH.format(q=q)
-            await page.goto(search_url, timeout=GOTO_TIMEOUT_MS)
-            await page.wait_for_load_state("domcontentloaded", timeout=60_000)
             try:
-                await page.wait_for_load_state("networkidle", timeout=30_000)
+                await safe_goto(page, search_url, absolute_folder, f"search_{ts}")
+                await page.wait_for_load_state("domcontentloaded", timeout=60_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=30_000)
+                except Exception:
+                    pass
             except Exception:
-                pass
+                # guardar HTML y screenshot para diagnóstico
+                try:
+                    html = await page.content()
+                    with open(os.path.join(absolute_folder, f"search_html_{ts}.html"), "w", encoding="utf-8") as fh:
+                        fh.write(html)
+                except Exception:
+                    pass
+                try:
+                    await page.screenshot(path=absolute_png, full_page=True)
+                except Exception:
+                    pass
+                raise
 
-            # 5) Chequear si el H3 indica 0 resultados (score 1 y mensaje del H3)
+            # 5) Chequear si el H3 indica 0 resultados
             zero_h3 = page.locator(SEL_ZERO_H3)
             zero_h3_txt = ""
             try:
@@ -130,12 +208,10 @@ async def consultar_portal_transparencia_ceis(consulta_id: int, nombre: str, ape
             except Exception:
                 pass
 
-            # inspeccionamos el HTML del H3 para ver si countResultados es 0
             is_zero = False
             try:
                 if await zero_h3.count() > 0:
                     h3_html = await zero_h3.first.inner_html()
-                    # busca <strong id="countResultados">0</strong>
                     is_zero = bool(re.search(r'id=["\']countResultados["\']>\s*0\s*<', h3_html))
             except Exception:
                 pass
@@ -159,8 +235,8 @@ async def consultar_portal_transparencia_ceis(consulta_id: int, nombre: str, ape
                     title_text = ""
 
                     for sel in SEL_ITEM_TITLE_CANDIDATES:
-                        loc = item.locator(sel).first
                         try:
+                            loc = item.locator(sel).first
                             if await loc.count() > 0 and await loc.is_visible():
                                 title_text = (await loc.inner_text(timeout=2_000)).strip()
                                 if title_text:
@@ -220,6 +296,7 @@ async def consultar_portal_transparencia_ceis(consulta_id: int, nombre: str, ape
             )
 
     except Exception as e:
+        # guardar error y cerrar navegador si está abierto
         try:
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id, fuente=fuente_obj,
