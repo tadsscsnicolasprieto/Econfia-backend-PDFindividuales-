@@ -1,5 +1,5 @@
 # bots/sca_search.py
-import os, re, asyncio, urllib.parse, unicodedata, random
+import os, re, asyncio, urllib.parse, unicodedata
 from datetime import datetime
 
 from django.conf import settings
@@ -8,16 +8,12 @@ from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 
 from core.models import Resultado, Fuente
 
-NOMBRE_SITIO = "sca_search"  # agrega este nombre en tu tabla core.Fuente
-URL_SEARCH = "https://www.sca.gov.ae/en/search.aspx?type=all&query={q}"
+NOMBRE_SITIO = "sca_search"
+URL_SEARCH = "https://www.sca.gov.ae/en/search.aspx"
 
-GOTO_TIMEOUT_MS = 200_000
+GOTO_TIMEOUT_MS = 45_000     # Mucho más rápido
+WAIT_RESULTS_MS = 12_000     # Antes era 60-90 seg
 RETRIES = 2
-
-# Selectores
-SEL_TOTAL_SPAN = "span.listing-total-count-num[data-listingcount='totalitemscount']"
-# cada tarjeta: <div class=" data-item col-md-4 item grid-item">
-SEL_RESULT_ITEM = "div[class*='data-item'][class*='grid-item']"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -25,11 +21,11 @@ UA = (
 )
 
 def _norm(s: str) -> str:
-    """minúsculas, sin tildes, espacios comprimidos"""
     s = (s or "").strip().lower()
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
     s = re.sub(r"\s+", " ", s)
     return s
+
 
 async def consultar_sca_search(consulta_id: int, nombre: str, apellido: str):
     navegador = None
@@ -70,6 +66,7 @@ async def consultar_sca_search(consulta_id: int, nombre: str, apellido: str):
     mensaje_final = "No hay coincidencias."
     score_final = 1
     success = False
+    screenshot_captured = False
     norm_query = _norm(full_name)
 
     try:
@@ -82,6 +79,7 @@ async def consultar_sca_search(consulta_id: int, nombre: str, apellido: str):
                     "--disable-dev-shm-usage",
                 ]
             )
+
             context = await navegador.new_context(
                 viewport={"width": 1400, "height": 900},
                 locale="en-US",
@@ -91,107 +89,161 @@ async def consultar_sca_search(consulta_id: int, nombre: str, apellido: str):
                     "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
                 }
             )
+
             page = await context.new_page()
-            await page.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
+            await page.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+            )
 
-            async def _load_search():
-                q = urllib.parse.quote_plus(full_name)
-                url = URL_SEARCH.format(q=q)
-                await page.goto(url, timeout=GOTO_TIMEOUT_MS)
-                await page.wait_for_load_state("domcontentloaded", timeout=60_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=60_000)
-                except Exception:
-                    pass
+            async def _real_search():
+                await page.goto(URL_SEARCH, timeout=GOTO_TIMEOUT_MS)
 
-            async def _wait_count_or_items(timeout_ms=90_000):
-                try:
-                    await page.wait_for_selector(f"{SEL_TOTAL_SPAN}, {SEL_RESULT_ITEM}",
-                                                 state="visible", timeout=timeout_ms)
-                    return True
-                except PWTimeout:
-                    return False
+                # Esperar el panel de filtros
+                await page.wait_for_selector("[data-isms-search-filters]", timeout=10_000)
 
-            for intento in range(1, RETRIES + 1):
-                try:
-                    await _load_search()
-                    ok = await _wait_count_or_items(70_000)
-                    if not ok:
-                        continue  # reintenta carga
+                # Scroll para activar render de Angular
+                await page.evaluate("window.scrollTo(0, 300)")
 
-                    # Leer el contador si existe
-                    count_text = ""
-                    total_span = page.locator(SEL_TOTAL_SPAN)
-                    if await total_span.count() > 0 and await total_span.first.is_visible():
-                        try:
-                            count_text = (await total_span.first.inner_text()).strip()
-                        except Exception:
-                            count_text = ""
-
-                    # Si explícitamente dice 0 → sin resultados
-                    if count_text and re.fullmatch(r"\d+", count_text) and int(count_text) == 0:
-                        mensaje_final = f"TotalCount: {count_text}"
-                        success = True
+                # Detectar input correcto
+                input_selector = None
+                for sel in [
+                    '[data-isms-search-filters] input[name="keywords"]',
+                    'input[name="keywords"]',
+                    '[data-isms-search-filters] input[type="text"]'
+                ]:
+                    if await page.locator(sel).count() > 0:
+                        input_selector = sel
                         break
 
-                    # Hay resultados (o al menos el contador no es 0). Revisar tarjetas
-                    items = page.locator(SEL_RESULT_ITEM)
-                    n = await items.count()
+                if not input_selector:
+                    raise Exception("No se encontró input de búsqueda")
 
-                    exact_hit = False
-                    for i in range(n):
-                        try:
-                            blob = (await items.nth(i).inner_text(timeout=5_000)).strip()
-                        except Exception:
-                            blob = ""
-                        if blob and _norm(blob).find(norm_query) != -1:
-                            exact_hit = True
-                            break
+                search_input = page.locator(input_selector)
+                await search_input.fill(full_name)
 
-                    if exact_hit:
+                # Forzar espera de Angular
+                await page.wait_for_timeout(500)
+
+                # Encontrar botón real
+                btn_selector = None
+                for sel in [
+                    "[data-isms-search-btn]",
+                    "[data-isms-search-filters] button.aegov-btn",
+                    "[data-isms-search-filters] button[type='button']"
+                ]:
+                    if await page.locator(sel).count() > 0:
+                        btn_selector = sel
+                        break
+
+                if not btn_selector:
+                    raise Exception("No se encontró botón para ejecutar búsqueda")
+
+                await page.locator(btn_selector).click()
+
+                # Esperar a que aparezca palabra clave (si realmente buscó)
+                await page.wait_for_selector('[data-icms-searchkeywords]', timeout=WAIT_RESULTS_MS)
+
+                # Scroll para cargar resultados (lazy load)
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+                # Esperar bloque de resultados (el que tú quieres)
+                await page.wait_for_selector('[data-icms-list="1"]', timeout=WAIT_RESULTS_MS)
+
+
+            # INTENTOS
+            last_exception = None
+            for intento in range(1, RETRIES + 1):
+                try:
+                    await _real_search()
+
+                    # Extraer texto de resultados
+                    keyword_span = page.locator("[data-icms-searchkeywords]")
+                    searched_txt = (await keyword_span.inner_text()).strip().lower()
+
+                    # Contenedor de páginas (resultados buenos)
+                    results_block = page.locator('[data-icms-list="1"]')
+
+                    html_block = await results_block.inner_text()
+
+                    if _norm(full_name) in _norm(html_block):
                         score_final = 5
-                        mensaje_final = f"Coincidencia exacta con el nombre buscado: '{full_name}'."
+                        mensaje_final = (
+                            f"Coincidencia exacta encontrada para '{full_name}'."
+                        )
                     else:
-                        score_final = 1
-                        # Si tenemos count_text distinto de vacío, lo anexamos para trazabilidad
-                        extra = f" (TotalCount: {count_text})" if count_text else ""
-                        mensaje_final = "Se encontraron resultados, pero sin coincidencia exacta del nombre." + extra
+                        mensaje_final = (
+                            "Se encontraron resultados, pero sin coincidencia exacta."
+                        )
 
                     success = True
                     break
 
-                except Exception:
+                except Exception as e:
+                    last_exception = e
+                    print(f"⚠️ Intento {intento}/{RETRIES} fallido: {str(e)[:100]}")
                     if intento == RETRIES:
-                        raise
+                        # No re-lanzar, continuar a captura y guardar error
+                        mensaje_final = f"Error en búsqueda: {str(e)[:200]}"
+                        success = False
+                    else:
+                        await page.wait_for_timeout(1000)
 
-            # Screenshot siempre
+            # 📸 ────────── CAPTURA FULL PAGE GRANDE ─────────────
+            screenshot_captured = False
             try:
+                # ⚠️ PASO 1: Cambiar viewport PRIMERO (antes de que Angular reflow)
+                await page.set_viewport_size({"width": 1920, "height": 2400})
+                await page.wait_for_timeout(500)
+
+                # PASO 2: Scroll para cargar lazy-loading
+                await page.evaluate("window.scrollTo(0, 0)")
+                await page.wait_for_timeout(300)
+                
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(800)
+
+                # PASO 3: Volver a top para captura limpia
+                await page.evaluate("window.scrollTo(0, 0)")
+                await page.wait_for_timeout(300)
+
+                # PASO 4: Capturar full_page (ahora SÍ debería ser grande)
+                print(f"📸 Capturando en {absolute_png}...")
                 await page.screenshot(path=absolute_png, full_page=True)
-            except Exception:
-                pass
+                screenshot_captured = True
+                print(f"✅ Screenshot capturado exitosamente")
 
-            try:
-                await navegador.close()
-            except Exception:
-                pass
-            navegador = None
+            except Exception as e:
+                print(f"❌ Error screenshot FULL PAGE: {e}")
+                try:
+                    # Fallback: captura simple sin full_page
+                    print("🔄 Intentando fallback (viewport actual)...")
+                    await page.screenshot(path=absolute_png, full_page=False)
+                    screenshot_captured = True
+                    print(f"✅ Fallback screenshot capturado")
+                except Exception as e2:
+                    print(f"❌ Fallback también falló: {e2}")
 
-        # 7) Guardado Resultado
-        if success:
-            await sync_to_async(Resultado.objects.create)(
-                consulta_id=consulta_id, fuente=fuente_obj,
-                score=score_final,
-                estado="Validada",
-                mensaje=mensaje_final,
-                archivo=relative_png
-            )
-        else:
-            await sync_to_async(Resultado.objects.create)(
-                consulta_id=consulta_id, fuente=fuente_obj,
-                score=1, estado="Sin Validar",
-                mensaje="No fue posible obtener resultados.",
-                archivo=relative_png
-            )
+            finally:
+                # Cerrar contexto y navegador correctamente
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+                try:
+                    await navegador.close()
+                except Exception:
+                    pass
+                navegador = None
+
+        # Guardar resultado
+        await sync_to_async(Resultado.objects.create)(
+            consulta_id=consulta_id,
+            fuente=fuente_obj,
+            score=score_final if success else 1,
+            estado="Validada" if success else "Sin Validar",
+            mensaje=mensaje_final if success else "No fue posible obtener resultados.",
+            archivo=relative_png if screenshot_captured else "",  # Solo si se capturó
+        )
 
     except Exception as e:
         try:

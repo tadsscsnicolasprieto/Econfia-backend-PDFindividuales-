@@ -1,13 +1,18 @@
 #!/usr/bin/env python
-"""Runner genérico para ejecutar un solo bot para pruebas.
-
-Uso:
-  python scripts/run_bot_single.py --bot adres --cedula 1070386336 --tipo CC
-  python scripts/run_bot_single.py --bot core.bots.adres.consultar_adres --cedula 1070386336 --tipo CC
-
-Soporta variables de entorno por bot: <BOTNAME>_HEADLESS y <BOTNAME>_SLOW_MO
-o banderas `--headless` / `--slow-mo`.
 """
+Runner universal para ejecutar cualquier bot sin importar su firma.
+
+Permite ejecutar bots que reciben:
+- (consulta_id)
+- (consulta_id, cedula)
+- (consulta_id, cedula, tipo_doc)
+- (consulta_id, nombre, apellido)
+- (consulta_id, pasaporte)
+- etc.
+
+Detecta automáticamente los parámetros.
+"""
+
 import os
 import sys
 import pathlib
@@ -17,132 +22,158 @@ import asyncio
 import importlib
 import inspect
 
-# Asegurar root en sys.path
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 django.setup()
 
 from django.contrib.auth import get_user_model
 from core.models import Candidato, Consulta
 
 
+# --------------------------------------------------------
+# Resolver módulo / función
+# --------------------------------------------------------
 def resolve_callable(bot_str: str):
-    """Resuelve una cadena a una función.
-    Soporta:
-      - 'core.bots.adres.consultar_adres'
-      - 'adres' -> intenta importar 'core.bots.adres' y buscar 'consultar_adres'
     """
-    if '.' in bot_str and bot_str.count('.') >= 2:
-        # assume full path to function
-        module_path, func_name = bot_str.rsplit('.', 1)
+    Permite:
+      python run_bot_single.py --bot adres
+      python run_bot_single.py --bot core.bots.adres.consultar_adres
+    """
+    if "." in bot_str and bot_str.count(".") >= 2:
+        module_path, func_name = bot_str.rsplit(".", 1)
         mod = importlib.import_module(module_path)
         func = getattr(mod, func_name)
         return func, module_path
 
-    # try module under core.bots
     module_path = f"core.bots.{bot_str}"
     try:
         mod = importlib.import_module(module_path)
     except Exception:
         raise ImportError(f"No pude importar módulo '{module_path}'")
 
-    # buscar función con nombre esperado
-    cand_names = [f"consultar_{bot_str}", 'consultar', f"consultar_{bot_str.replace('-','_')}"]
-    for name in cand_names:
+    # funciones típicas
+    for name in [
+        f"consultar_{bot_str}",
+        "consultar",
+        f"consultar_{bot_str.replace('-', '_')}",
+    ]:
         if hasattr(mod, name):
             return getattr(mod, name), module_path
 
-    # fallback: buscar primera callable que empiece por 'consultar_'
+    # fallback: primer 'consultar_'
     for attr in dir(mod):
-        if attr.startswith('consultar_'):
+        if attr.startswith("consultar_"):
             return getattr(mod, attr), module_path
 
-    raise ImportError(f"No encontré función de consulta en módulo '{module_path}'")
+    raise ImportError(f"No encontré función de consulta en '{module_path}'")
 
 
-async def call_bot(func, consulta_id, cedula, tipo_doc):
+# --------------------------------------------------------
+# Llamador universal
+# --------------------------------------------------------
+async def call_bot_dynamic(func, consulta_id, cedula, tipo_doc, nombre, apellido, fecha_expedicion=None):
+    """
+    Detecta la firma del bot y llena automáticamente los parámetros.
+    Compatibilidad total con bots nuevos y viejos.
+    """
     sig = inspect.signature(func)
-    kwargs = {}
-    for name, param in sig.parameters.items():
-        ln = name.lower()
-        if ln in ('consulta_id', 'consulta'):
-            kwargs[name] = consulta_id
-        elif ln in ('cedula', 'numero', 'numero_doc', 'documento', 'numero_documento', 'numerodocumento'):
-            kwargs[name] = cedula
-        elif ln in ('tipo_doc', 'tipo', 'tipodoc', 'tipo_documento', 'tipodocumento'):
-            kwargs[name] = tipo_doc
+    params = sig.parameters
+    args = []
+
+    # Mapa de nombres que se pueden llenar automáticamente
+    value_map = {
+        "consulta_id": consulta_id,
+        "consulta": consulta_id,
+        "cedula": cedula,
+        "documento": cedula,
+        "numero": cedula,
+        "numero_doc": cedula,
+        "tipo": tipo_doc,
+        "tipo_doc": tipo_doc,
+        "tipo_documento": tipo_doc,
+        "nombre": nombre,
+        "apellido": apellido,
+        "nombres": nombre,
+        "apellidos": apellido,
+        "fecha_expedicion": fecha_expedicion,
+        "fecha": fecha_expedicion,
+    }
+
+    # Llenar según orden declarado
+    for pname in params:
+        key = pname.lower()
+        if key in value_map:
+            args.append(value_map[key])
         else:
-            # no tenemos valor para ese parámetro, omitir
-            pass
+            # parámetros no reconocidos → None
+            args.append(None)
 
-    # Si la firma no acepta kwargs (p.ej. solo parámetros posicionales), intentar llamada posicional simple
-    try:
-        if kwargs:
-            return await func(**kwargs)
-        else:
-            # intento posicional con los 3 valores comunes
-            return await func(consulta_id, cedula, tipo_doc)
-    except TypeError:
-        # último recurso: llamada posicional con 1-3 args según aridad
-        params = list(sig.parameters)
-        arity = len(params)
-        args = []
-        if arity >= 1:
-            args.append(consulta_id)
-        if arity >= 2:
-            args.append(cedula)
-        if arity >= 3:
-            args.append(tipo_doc)
-        return await func(*args)
+    return await func(*args)
 
 
+# --------------------------------------------------------
+# MAIN
+# --------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--bot', required=True, help="Nombre del bot o ruta a función (ej: 'adres' o 'core.bots.adres.consultar_adres')")
-    parser.add_argument('--cedula', required=True)
-    parser.add_argument('--tipo', default='CC')
-    parser.add_argument('--headless', choices=['true','false'], help='Override headless')
-    parser.add_argument('--slow-mo', type=int, help='Override slow_mo (ms)')
+    parser.add_argument("--bot", required=True)
+    parser.add_argument("--cedula", default="")
+    parser.add_argument("--tipo", default="CC")
+    parser.add_argument("--nombre", default="Prueba")
+    parser.add_argument("--apellido", default="Runner")
+    parser.add_argument("--fecha-expedicion", default=None)
+    parser.add_argument("--headless", choices=["true", "false"])
+    parser.add_argument("--slow-mo", type=int)
     args = parser.parse_args()
 
     # resolver función
     func, module_path = resolve_callable(args.bot)
 
-    # preparar user/candidato/consulta
+    # usuario para ejecutar
     User = get_user_model()
-    user = User.objects.first()
-    if not user:
-        user = User.objects.create_user(username='testbot_runner', password='test123')
+    user = User.objects.first() or User.objects.create_user("testbot_runner", "test123")
 
+    # crear candidato
     candidato, _ = Candidato.objects.get_or_create(
-        cedula=args.cedula,
-        defaults={'tipo_doc': args.tipo, 'nombre': 'Prueba', 'apellido': 'Runner'}
+        cedula=args.cedula or "0",
+        defaults={"tipo_doc": args.tipo, "nombre": args.nombre, "apellido": args.apellido},
     )
 
-    consulta = Consulta.objects.create(candidato=candidato, usuario=user, estado='pendiente')
-    print(f"Creada consulta id={consulta.id} para cedula={args.cedula} (bot={args.bot})")
+    # crear consulta
+    consulta = Consulta.objects.create(candidato=candidato, usuario=user, estado="pendiente")
+    print(f"Creada consulta id={consulta.id} (bot={args.bot})")
 
-    # set env overrides: prefer explicit flags, else BOTNAME_HEADLESS
-    botname_env = os.path.basename(module_path)
-    if args.headless is not None:
-        os.environ[f"{botname_env.upper()}_HEADLESS"] = args.headless
-    if args.slow_mo is not None:
-        os.environ[f"{botname_env.upper()}_SLOW_MO"] = str(args.slow_mo)
+    # Config de headless y slowmo
+    bot_env = os.path.basename(module_path).upper()
+    if args.headless:
+        os.environ[f"{bot_env}_HEADLESS"] = args.headless
+    if args.slow_mo:
+        os.environ[f"{bot_env}_SLOW_MO"] = str(args.slow_mo)
 
-    # Ejecutar
     try:
-        asyncio.run(call_bot(func, consulta.id, args.cedula, args.tipo))
-        print('Ejecución finalizada')
+        asyncio.run(
+            call_bot_dynamic(
+                func=func,
+                consulta_id=consulta.id,
+                cedula=args.cedula,
+                tipo_doc=args.tipo,
+                nombre=args.nombre,
+                apellido=args.apellido,
+                fecha_expedicion=args.fecha_expedicion,
+            )
+        )
+        print("Ejecución finalizada correctamente.")
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        print('Error durante la ejecución:', e)
+        print("Error durante la ejecución:", e)
 
-    print('Hecho')
+    print("Hecho.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

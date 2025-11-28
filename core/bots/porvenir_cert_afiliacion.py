@@ -1,110 +1,67 @@
 # core/bots/porvenir_cert_afiliacion.py
 import os
 import re
+import asyncio
+import random
 from datetime import datetime
-from pathlib import Path
 
 from django.conf import settings
 from asgiref.sync import sync_to_async
-from playwright.async_api import async_playwright, TimeoutError as PWTimeout
+from playwright.async_api import async_playwright
 
 from core.models import Resultado, Fuente
 
-# Nuevo: URL de aterrizaje + URL objetivo (la que ya usabas)
+# URLs oficiales
 LANDING_URL = "https://www.porvenir.com.co/certificados-y-extractos"
 URL = "https://www.porvenir.com.co/web/certificados-y-extractos/certificado-de-afiliacion"
 NOMBRE_SITIO = "porvenir_cert_afiliacion"
 
-# Mapa del tipo de documento (valores del <select>)
+# Mapa de tipos de documento
 TIPO_DOC_MAP = {"CC": "CC", "CE": "CE", "TI": "TI"}
 
-POPPLER_PATH = getattr(settings, "POPPLER_PATH", os.getenv("POPPLER_PATH"))
 
-# -------- Helpers PDF / texto / screenshots --------
 def _normalize_ws(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
-def _texto_pdf_pymupdf(path: str) -> str:
-    try:
-        import fitz
-        with fitz.open(path) as doc:
-            return "\n".join(pg.get_text("text") or "" for pg in doc)
-    except Exception:
-        return ""
 
-def _texto_pdf_pdfminer(path: str) -> str:
-    try:
-        from pdfminer.high_level import extract_text
-        return extract_text(path) or ""
-    except Exception:
-        return ""
+async def _human_delay(min_ms: int = 500, max_ms: int = 1500):
+    """Espera variable para simular comportamiento humano"""
+    delay = random.uniform(min_ms, max_ms) / 1000
+    await asyncio.sleep(delay)
 
-def _render_pdf_primera_pagina_pymupdf(path_pdf: str, path_png: str, zoom: float = 2.0) -> bool:
-    try:
-        import fitz
-        with fitz.open(path_pdf) as doc:
-            if doc.page_count < 1:
-                return False
-            pg = doc[0]
-            pix = pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-            pix.save(path_png)
-        return os.path.exists(path_png) and os.path.getsize(path_png) > 0
-    except Exception:
-        return False
 
-def _render_pdf_primera_pagina_pdf2image(path_pdf: str, path_png: str, dpi: int = 300) -> bool:
-    try:
-        from pdf2image import convert_from_path
-        kwargs = {"dpi": dpi, "first_page": 1, "last_page": 1}
-        if POPPLER_PATH:
-            kwargs["poppler_path"] = POPPLER_PATH
-        imgs = convert_from_path(path_pdf, **kwargs)
-        if imgs:
-            imgs[0].save(path_png, "PNG")
-            return True
-        return False
-    except Exception:
-        return False
-
-async def _screenshot_pdf_embed(context, abs_pdf: str, abs_png: str) -> None:
-    """Abre file:// del PDF y captura solo el <embed> (evita UI del visor)."""
-    viewer = await context.new_page()
-    file_url = Path(abs_pdf).resolve().as_uri()
-    await viewer.goto(file_url, wait_until="load")
-    loc = viewer.locator("embed#pdf-embed, embed[type*='pdf']").first
-    await loc.wait_for(state="visible", timeout=10000)
-    await loc.screenshot(path=abs_png)
-    await viewer.close()
-
-def _extraer_frase_afiliado(texto: str) -> str:
-    """
-    Intenta tomar la oración que incluye 'se encuentra afiliado(a) al Fondo de Pensiones Obligatorias Porvenir.'
-    """
-    t = _normalize_ws(texto)
-    m = re.search(r"(identificado\(a\).*?se\s+encuentra\s+afiliad[oa].*?Porvenir\.)", t, re.I)
-    if m:
-        return _normalize_ws(m.group(1))
-    return "Se encuentra afiliado(a) al Fondo de Pensiones Obligatorias Porvenir."
-
-# ---------------- Bot principal ----------------
 async def consultar_porvenir_cert_afiliacion(consulta_id: int, cedula: str, tipo_doc: str):
-    fuente_obj = await sync_to_async(lambda: Fuente.objects.filter(nombre=NOMBRE_SITIO).first())()
+    """
+    Versión ESTABLE:
+      - No intenta resolver CAPTCHA.
+      - No intenta descargar el PDF.
+      - Solo envía el formulario y captura el mensaje que muestre Porvenir
+        (éxito: enviado al correo, no afiliado, error técnico, etc.).
+    """
+
+    # Buscar la fuente configurada en BD
+    fuente_obj = await sync_to_async(
+        lambda: Fuente.objects.filter(nombre=NOMBRE_SITIO).first()
+    )()
     if not fuente_obj:
         await sync_to_async(Resultado.objects.create)(
-            consulta_id=consulta_id, fuente=None, score=0,
-            estado="Sin Validar", mensaje=f"No existe Fuente con nombre='{NOMBRE_SITIO}'", archivo=""
+            consulta_id=consulta_id,
+            fuente=None,
+            estado="Sin Validar",
+            mensaje=f"No existe la fuente '{NOMBRE_SITIO}'",
+            archivo="",
+            score=0,
         )
         return
 
-    # Rutas de salida
+    # Carpetas de salida
     relative_folder = os.path.join("resultados", str(consulta_id))
     absolute_folder = os.path.join(settings.MEDIA_ROOT, relative_folder)
     os.makedirs(absolute_folder, exist_ok=True)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     base = f"porvenir_{cedula}_{ts}"
-    abs_pdf = os.path.join(absolute_folder, f"{base}.pdf")
-    rel_pdf = os.path.join(relative_folder, f"{base}.pdf").replace("\\", "/")
+
     abs_png = os.path.join(absolute_folder, f"{base}.png")
     rel_png = os.path.join(relative_folder, f"{base}.png").replace("\\", "/")
 
@@ -115,148 +72,327 @@ async def consultar_porvenir_cert_afiliacion(consulta_id: int, cedula: str, tipo
         if not tipo_val:
             raise ValueError(f"Tipo de documento no soportado: {tipo_doc!r}")
 
+        print(f"[PORVENIR] Iniciando flujo estable para cedula={cedula}, tipo={tipo_doc}")
+
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                accept_downloads=True, viewport={"width": 1400, "height": 900}, locale="es-CO"
+            # Modo "offscreen": ventana real pero fuera de la pantalla
+            print("[PORVENIR] Lanzando navegador (offscreen, anti-detección avanzada)...")
+            browser = await p.chromium.launch(
+                headless=False,  # importante: no headless para evitar bloqueos
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--disable-infobars",
+                    "--no-sandbox",
+                    "--disable-web-security",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--disable-component-update",
+                    "--disable-sync",
+                    "--disable-extensions",
+                    "--disable-default-apps",
+                    "--disable-preconnect",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--window-size=1400,900",
+                    "--window-position=-2000,0",  # mueve la ventana fuera de la pantalla
+                ],
             )
+
+            context = await browser.new_context(
+                viewport={"width": 1400, "height": 900},
+                locale="es-CO",
+                accept_downloads=False,
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36 "
+                    "Edg/122.0.0.0"  # Edge para variar
+                ),
+                extra_http_headers={
+                    "Accept-Language": "es-CO,es;q=0.9,en;q=0.8",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1",
+                },
+            )
+
+            # Script de anti-detección AVANZADO
+            await context.add_init_script(
+                """
+                // 1. Remover indicadores de automatización
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
+                
+                // 2. Chrome runtime (anti-headless)
+                window.chrome = {
+                    runtime: {
+                        id: 'aabbccdd',
+                        onInstalled: { addListener: () => {} },
+                        onMessage: { addListener: () => {} },
+                    }
+                };
+                
+                // 3. Plugins (simulate real plugins)
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [
+                        { name: 'Chrome PDF Plugin', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer' },
+                        { name: 'Native Client Executable', description: '' },
+                    ],
+                });
+                
+                // 4. Languages y lenguaje predeterminado
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['es-CO', 'es', 'en-US', 'en'],
+                });
+                
+                Object.defineProperty(navigator, 'language', {
+                    get: () => 'es-CO',
+                });
+                
+                // 5. Permissions query (anti-detection)
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications'
+                        ? Promise.resolve({ state: Notification.permission })
+                        : originalQuery(parameters)
+                );
+                
+                // 6. Platform, hardwareConcurrency, deviceMemory
+                Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+                Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+                Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+                
+                // 7. Canvas fingerprinting (simular normalidad)
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(125, 1, 62, 20);
+                ctx.fillStyle = '#069';
+                ctx.fillText('Browser Fingerprint', 2, 15);
+                
+                // 8. Quitar __proto__ y propiedades sospechosas
+                Object.defineProperty(navigator, '__proto__', {
+                    get: function() { return navigator; }
+                });
+                
+                // 9. Screen resolution (simular monitor real)
+                Object.defineProperty(screen, 'width', { get: () => 1920 });
+                Object.defineProperty(screen, 'height', { get: () => 1080 });
+                Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
+                Object.defineProperty(screen, 'availHeight', { get: () => 1040 });
+                
+                // 10. Timezone (Colombia)
+                Object.defineProperty(Intl.DateTimeFormat.prototype, 'resolvedOptions', {
+                    value: function() { return { timeZone: 'America/Bogota' }; }
+                });
+                
+                // 11. Quitar console.log y funciones de debug
+                if (typeof __nightmare !== 'undefined' || typeof _phantom !== 'undefined') {
+                    throw new Error('PhantomJS detected!');
+                }
+                
+                // 12. Random seed para canvas
+                Math.random = (function() {
+                    const x = Math.sin(12345) * 10000;
+                    return function() {
+                        return x - Math.floor(x);
+                    };
+                })();
+                """
+            )
+
             page = await context.new_page()
+            
+            # Agregar delay aleatorio antes de navegar (simular usuario pensando)
+            await _human_delay(1000, 3000)
+            
+            print("[PORVENIR] Navegador iniciado (anti-detección aplicada)")
 
-            # ---- PASO HUMANO EXTRA: entrar al landing y clicar "Descárgalo aquí"
+            # PASO 1 – Landing
+            print("[PORVENIR] PASO 1: Navegando al landing...")
             await page.goto(LANDING_URL, wait_until="domcontentloaded", timeout=90000)
+            await _human_delay(1500, 2500)  # Esperar como usuario real
+
             try:
-                await page.wait_for_load_state("networkidle", timeout=15000)
+                await page.wait_for_load_state("networkidle", timeout=8000)
             except Exception:
                 pass
 
-            # Posible banner de cookies (no rompe si no existe)
+            # Cerrar cookies si aparecen
             try:
-                # intenta botones comunes
-                cookie_btn = page.locator(
-                    "button:has-text('Aceptar'), button:has-text('Acepto'), "
-                    "button[aria-label*='acept'], .cookie-accept"
+                cookie = page.locator(
+                    "button:has-text('Aceptar'), button:has-text('Acepto'), [aria-label*='acept']"
                 ).first
-                await cookie_btn.click(timeout=3000)
+                if await cookie.count() > 0:
+                    await _human_delay(800, 1200)  # Delay antes de cerrar
+                    await cookie.click(timeout=3000)
+                    await _human_delay(500, 1000)
+                    print("[PORVENIR] Banner de cookies cerrado")
             except Exception:
                 pass
 
-            # Click robusto al link "Descárgalo aquí"
+            # PASO 2 – Ir al formulario de certificado
+            print("[PORVENIR] PASO 2: Navegando al formulario de certificado...")
             try:
-                # 1) por texto visible
                 link = page.locator("a:has-text('Descárgalo aquí')").first
                 if await link.count() == 0:
-                    # 2) por clase + href parcial
-                    link = page.locator(
-                        "a.prv-btn.prv-btn--green.prv-btn--round-corner[href*='certificado-de-afiliacion']"
-                    ).first
+                    link = page.locator("a[href*='certificado-de-afiliacion']").first
 
-                await link.scroll_into_view_if_needed(timeout=5000)
-                async with page.expect_navigation(url_or_predicate=lambda u: "certificado-de-afiliacion" in u, timeout=15000):
-                    await link.click(force=True)
+                await _human_delay(800, 1500)  # Simular lectura
+                async with page.expect_navigation(timeout=15000):
+                    await link.click()
+                await _human_delay(1500, 2500)  # Esperar carga
+                print("[PORVENIR] Navegó al formulario mediante link")
+            except Exception as e:
+                print(f"[PORVENIR] No encontró link, navegando directo: {e}")
+                await page.goto(URL, wait_until="domcontentloaded", timeout=90000)
+                await _human_delay(1500, 2500)
+
+            # Asegurar URL de destino
+            try:
+                await page.wait_for_url(
+                    lambda u: "certificado-de-afiliacion" in u, timeout=8000
+                )
             except Exception:
-                # Fallback: ir directo
                 await page.goto(URL, wait_until="domcontentloaded", timeout=90000)
 
-            # Asegurar que estamos en la página objetivo
-            try:
-                await page.wait_for_url(lambda u: "certificado-de-afiliacion" in u, timeout=10000)
-            except Exception:
-                # Si no llegó por cualquier razón, forzar la URL destino
-                await page.goto(URL, wait_until="domcontentloaded", timeout=90000)
-
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-
-            # ---- A partir de aquí, tu flujo normal tal cual ----
-
-            # 2) Formulario (ids dinámicos → usamos ends-with)
+            # PASO 3 – Llenar formulario
+            print("[PORVENIR] PASO 3: Llenando formulario...")
             await page.wait_for_selector('select[id$="_documento"]', timeout=20000)
-            await page.select_option('select[id$="_documento"]', value=tipo_val)
-            await page.fill('input[id$="_numeroIdentificacion"]', str(cedula))
+            
+            # Delay antes de interactuar
+            await _human_delay(800, 1200)
+            
+            # Seleccionar tipo de documento
+            await page.select_option('select[id$="_documento"]', tipo_val)
+            await _human_delay(600, 1000)
+            
+            # Llenar cédula carácter por carácter
+            input_field = page.locator('input[id$="_numeroIdentificacion"]:not([type="hidden"])')
+            await input_field.click()
+            await _human_delay(300, 600)
+            
+            for char in str(cedula):
+                await input_field.type(char, delay=random.randint(50, 150))
+            
+            await _human_delay(800, 1200)
+            print("[PORVENIR] Formulario completado")
 
-            # 3) Click y esperar posible descarga
-            download = None
+            # PASO 4 – Enviar formulario (SIN captcha y SIN descarga)
+            print("[PORVENIR] PASO 4: Enviando formulario...")
+            await _human_delay(1000, 1500)
+            
             try:
-                async with page.expect_download(timeout=15000) as dl:
-                    await page.click("#submitDescargarCertificado")
-                download = await dl.value
+                await page.click("#submitDescargarCertificado", timeout=5000)
             except Exception:
-                # Si no descargó, puede ser no afiliado o demora; seguimos validando abajo
+                print("[PORVENIR] Click normal falló, usando JS...")
+                await page.evaluate(
+                    "document.querySelector('#submitDescargarCertificado')?.click();"
+                )
+
+            await _human_delay(2000, 3500)
+
+            await page.wait_for_timeout(2500)
+
+            # PASO 5 – Analizar estado de la pantalla
+            print("[PORVENIR] PASO 5: Detectando mensaje en pantalla...")
+
+            estado = None
+            mensaje = None
+
+            # 5.1 – Mensaje de éxito / enviado
+            try:
+                exito = page.locator(
+                    "p:has-text('descargado con éxito'), "
+                    "p:has-text('se ha descargado con éxito'), "
+                    "p:has-text('enviado'), "
+                    "p:has-text('se ha enviado'), "
+                    "h2:has-text('Tu certificado se ha descargado con éxito')"
+                ).first
+                await exito.wait_for(state="visible", timeout=8000)
+                mensaje = _normalize_ws(await exito.inner_text())
+                estado = "Validada"
+                print(f"[PORVENIR] Mensaje de ÉXITO detectado: {mensaje}")
+            except Exception:
                 pass
 
-            # 4) Caso NO afiliado (mensaje p.p-status)
-            try:
-                status = page.locator("p.p-status").first
-                await status.wait_for(state="visible", timeout=4000)
-                # Tomar screenshot completo como evidencia
-                await page.screenshot(path=abs_png, full_page=True)
-                msg = _normalize_ws(await status.inner_text())
-                await sync_to_async(Resultado.objects.create)(
-                    consulta_id=consulta_id,
-                    fuente=fuente_obj,
-                    estado="Validada",
-                    mensaje=msg,
-                    score=1,
-                    archivo=rel_png
-                )
-                return
-            except Exception:
-                pass
+            # 5.2 – Mensaje NO afiliado
+            if not estado:
+                try:
+                    na = page.locator("p.p-status").first
+                    await na.wait_for(state="visible", timeout=4000)
+                    mensaje = _normalize_ws(await na.inner_text())
+                    estado = "Validada"
+                    print(f"[PORVENIR] Mensaje de NO AFILIADO: {mensaje}")
+                except Exception:
+                    pass
 
-            # 5) Si hay descarga → guardar PDF y generar PNG “solo documento”
-            if download:
-                await download.save_as(abs_pdf)
+            # 5.3 – Mensajes de error técnico / mantenimiento
+            if not estado:
+                try:
+                    err = page.locator(
+                        "p:has-text('problema técnico'), "
+                        "p:has-text('Por favor ingresa más tarde'), "
+                        'p:has-text("Nuestro servicio está experimentando un problema técnico")'
+                    ).first
+                    await err.wait_for(state="visible", timeout=6000)
+                    mensaje = _normalize_ws(await err.inner_text())
+                    estado = "Sin Validar"
+                    print(f"[PORVENIR] Mensaje de ERROR/MANTENIMIENTO: {mensaje}")
+                except Exception:
+                    pass
 
-                png_ok = _render_pdf_primera_pagina_pymupdf(abs_pdf, abs_png, zoom=2.0)
-                if not png_ok:
-                    png_ok = _render_pdf_primera_pagina_pdf2image(abs_pdf, abs_png, dpi=300)
-                if not png_ok:
-                    await _screenshot_pdf_embed(context, abs_pdf, abs_png)
+            # 5.4 – Fallback si no se detectó nada
+            if not estado:
+                estado = "Sin Validar"
+                mensaje = "No se pudo determinar el estado. Revise la evidencia."
+                print("[PORVENIR] No se detectó ningún mensaje claro.")
 
-                # Extraer texto y armar mensaje
-                texto = _texto_pdf_pymupdf(abs_pdf) or _texto_pdf_pdfminer(abs_pdf)
-                mensaje = _extraer_frase_afiliado(texto)
-
-                await sync_to_async(Resultado.objects.create)(
-                    consulta_id=consulta_id,
-                    fuente=fuente_obj,
-                    estado="Validada",
-                    mensaje=mensaje,
-                    score=1,
-                    archivo=rel_png
-                )
-                return
-
-            # 6) Fallback absoluto (ni mensaje ni descarga): screenshot y mensaje genérico
+            # PASO 6 – Captura final
+            print("[PORVENIR] Capturando pantalla final...")
             await page.screenshot(path=abs_png, full_page=True)
+
+            # Guardar en BD
             await sync_to_async(Resultado.objects.create)(
                 consulta_id=consulta_id,
                 fuente=fuente_obj,
-                estado="Sin Validar",
-                mensaje="No fue posible determinar el estado (sin mensaje y sin descarga). Revise la evidencia.",
-                score=1,
-                archivo=rel_png
+                estado=estado,
+                mensaje=mensaje,
+                archivo=rel_png,
+                score=1 if estado == "Validada" else 0,
             )
 
     except Exception as e:
+        import traceback
+
+        print("[PORVENIR] EXCEPTION:", str(e))
+        print(traceback.format_exc())
+
         await sync_to_async(Resultado.objects.create)(
             consulta_id=consulta_id,
             fuente=fuente_obj,
             estado="Sin Validar",
             mensaje=str(e),
+            archivo="",
             score=0,
-            archivo=""
         )
+
     finally:
         try:
             if context:
                 await context.close()
         except Exception:
             pass
+
         try:
             if browser:
                 await browser.close()
         except Exception:
             pass
+
+        print("[PORVENIR] Bot finalizado (flujo estable sin captcha/descarga).")

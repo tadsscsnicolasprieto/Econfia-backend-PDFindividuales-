@@ -43,7 +43,7 @@ async def consultar_embajada_alemania_funcionarios(
     mensaje_final = "Ejecución incompleta"
 
     # Lee env vars
-    headless_env = os.environ.get("EMBAJADA_ALEMANIA_HEADLESS", "true").lower()
+    headless_env = os.environ.get("EMBAJADA_ALEMANIA_HEADLESS", "false").lower()  # ⚠️ DEFAULT: false
     headless_flag = headless_env not in ["false", "0", "no"]
     slow_mo_env = os.environ.get("EMBAJADA_ALEMANIA_SLOW_MO", "0")
     slow_mo = int(slow_mo_env) if slow_mo_env.isdigit() else 0
@@ -172,6 +172,16 @@ async def consultar_embajada_alemania_funcionarios(
             # Extra: Espera por si Cloudflare aún está procesando
             await asyncio.sleep(3)
 
+            # Extra: Esperar a que exista al menos UN input (para asegurar DOM renderizado)
+            print(f"[embajada_alemania] Esperando a que el DOM esté completamente cargado")
+            try:
+                await page.wait_for_selector("input", state="attached", timeout=10000)
+            except Exception:
+                print(f"[embajada_alemania] Timeout esperando inputs, continuando de todas formas")
+                pass
+            
+            await asyncio.sleep(2)
+
             # 3) Cerrar cookies/popups
             print(f"[embajada_alemania] Cerrando popups de cookies")
             try:
@@ -204,21 +214,64 @@ async def consultar_embajada_alemania_funcionarios(
             except Exception:
                 pass
 
-            # 5) Localizar input de búsqueda
+            # 5) Localizar input de búsqueda - intentar múltiples selectores
             print(f"[embajada_alemania] Buscando campo de búsqueda")
             input_loc = None
-            try:
-                await page.wait_for_selector("#edit-keys:visible", state="visible", timeout=5000)
-                input_loc = page.locator("#edit-keys:visible").first
-                print(f"[embajada_alemania] Campo encontrado: #edit-keys:visible")
-            except Exception:
+            
+            # Lista de selectores alternativos para encontrar el campo
+            search_selectors = [
+                "#edit-keys:visible",
+                "input#edit-keys:visible",
+                "input[id='edit-keys']:visible",
+                "main input#edit-keys:visible",
+                "main input[name='keys']:visible",
+                "form input[name='keys']:visible",
+                "input[name='keys']:visible",
+                ".form-search input:visible",
+                "input[type='text'][placeholder*='uscar']:visible",
+                "input[type='search']:visible",
+            ]
+            
+            for selector in search_selectors:
                 try:
-                    await page.wait_for_selector("main input#edit-keys.form-search:visible", state="visible", timeout=5000)
-                    input_loc = page.locator("main input#edit-keys.form-search:visible").first
-                    print(f"[embajada_alemania] Campo encontrado: main input#edit-keys.form-search:visible")
+                    print(f"[embajada_alemania] Intentando selector: {selector}")
+                    await page.wait_for_selector(selector, state="visible", timeout=3000)
+                    input_loc = page.locator(selector).first
+                    print(f"[embajada_alemania] ✅ Campo encontrado con selector: {selector}")
+                    break
                 except Exception as e:
-                    print(f"[embajada_alemania] ERROR: No se encontró campo de búsqueda: {e}")
-                    raise ValueError("No se encontró el campo de búsqueda #edit-keys")
+                    print(f"[embajada_alemania] ✗ Selector no funcionó: {selector}")
+                    continue
+
+            if not input_loc:
+                # Diagnóstico: capturar screenshot y mostrar selectores disponibles
+                print(f"[embajada_alemania] ⚠️ No se encontró campo con selectores estándar, capturando diagnóstico")
+                diag_png = os.path.join(absolute_folder, f"{NOMBRE_SITIO}_diagnostic_{ts}.png")
+                await page.screenshot(path=diag_png, full_page=True)
+                print(f"[embajada_alemania] Screenshot de diagnóstico guardado: {diag_png}")
+                
+                # Intentar encontrar CUALQUIER input
+                try:
+                    inputs = page.locator("input")
+                    input_count = await inputs.count()
+                    print(f"[embajada_alemania] Encontrados {input_count} inputs en la página")
+                    
+                    if input_count > 0:
+                        # Usar el primer input visible
+                        for i in range(input_count):
+                            inp = inputs.nth(i)
+                            try:
+                                if await inp.is_visible(timeout=1000):
+                                    input_loc = inp
+                                    print(f"[embajada_alemania] Usando primer input visible (índice {i})")
+                                    break
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+            if not input_loc:
+                raise ValueError(f"No se encontró campo de búsqueda. Selectores probados: {search_selectors}")
 
             # 6) Realizar búsqueda
             print(f"[embajada_alemania] Ejecutando búsqueda: '{query}'")
