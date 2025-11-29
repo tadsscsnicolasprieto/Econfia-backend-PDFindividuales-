@@ -51,64 +51,144 @@ def _crear_resultado(consulta_id, fuente, score, estado, mensaje, archivo):
     )
 
 
-async def _solve_recaptcha_invisible(page, max_attempts=1):
+async def _solve_recaptcha_invisible(page, max_attempts=2):
     """
     Detecta iframe de reCAPTCHA v2 (anchor), extrae sitekey y pide token al resolver.
-    Inserta token en textarea(s) g-recaptcha-response. Devuelve token o None.
+    Intentará dos variantes de tarea en el solver:
+      1) RecaptchaV2TaskProxyless (invisible / proxyless)
+      2) RecaptchaV2TaskProxylessVisible (visible) — fallback si la primera falla
+    Devuelve token o None.
     """
-    try:
-        iframe = await page.query_selector("iframe[src*='recaptcha/api2/anchor']")
-        if not iframe:
-            return None
-        src = await iframe.get_attribute("src")
-        if not src:
-            return None
-        sitekey = (parse_qs(urlparse(src).query).get("k") or [None])[0]
-        if not sitekey:
-            return None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            iframe = await page.query_selector("iframe[src*='recaptcha/api2/anchor'], iframe[src*='recaptcha/enterprise/anchor']")
+            if not iframe:
+                print(f"[Captcha] No se encontró iframe de recaptcha en intento {attempt}")
+                # intentar detectar badge o contenedor con data-sitekey
+                sitekey = await page.evaluate("""() => {
+                    const el = document.querySelector('.g-recaptcha[data-sitekey], [data-sitekey]');
+                    return el && (el.getAttribute('data-sitekey') || null);
+                }""")
+                if not sitekey:
+                    await asyncio.sleep(0.8)
+                    continue
+            else:
+                src = await iframe.get_attribute("src")
+                if not src:
+                    print(f"[Captcha] Iframe sin src en intento {attempt}")
+                    await asyncio.sleep(0.8)
+                    continue
+                sitekey = (parse_qs(urlparse(src).query).get("k") or [None])[0]
 
-        # resolver captcha (puede tardar)
-        token = await resolver_captcha_v2(page.url, sitekey)
-        if not token:
-            return None
+            if not sitekey:
+                print(f"[Captcha] No se encontró sitekey en intento {attempt}")
+                await asyncio.sleep(0.8)
+                continue
 
-        # insertar token en textareas del formulario
-        await page.evaluate(
-            """(token) => {
-                const form = document.querySelector('#aspnetForm') || document.querySelector('form');
-                if (!form) return;
-                const ensure = (id) => {
-                  let t = form.querySelector('#'+id);
-                  if (!t) {
-                    t = document.createElement('textarea');
-                    t.id = id; t.name = id; t.style.display = 'none';
-                    form.appendChild(t);
-                  }
-                  t.value = token;
-                };
-                ensure('g-recaptcha-response');
-                ensure('g-recaptcha-response-100000');
-                // disparar eventos para que el front procese el valor
-                const el = form.querySelector('#g-recaptcha-response') || form.querySelector('textarea[name=\"g-recaptcha-response\"]');
-                if (el) {
-                    el.dispatchEvent(new Event('input', {bubbles:true}));
-                    el.dispatchEvent(new Event('change', {bubbles:true}));
-                }
-            }""",
-            token
-        )
-        # dar margen para que el front procese el token
-        await asyncio.sleep(0.6 + random.random() * 0.6)
-        return token
-    except Exception:
-        return None
+            print(f"[Captcha] Sitekey detectado: {sitekey} (intento {attempt})")
+
+            # Intento 1: RecaptchaV2TaskProxyless (invisible / proxyless)
+            try:
+                print(f"[Captcha] Solicitando token a resolver_captcha_v2 (variant=proxyless) — intento {attempt}")
+                token = await resolver_captcha_v2(page.url, sitekey, task_variant="proxyless")
+            except Exception as e:
+                print(f"[Captcha] Error al llamar resolver_captcha_v2 (proxyless): {e}")
+                token = None
+
+            if token:
+                print(f"[Captcha] Token recibido (proxyless) en intento {attempt}")
+            else:
+                print(f"[Captcha] No se obtuvo token con proxyless en intento {attempt}, probando variante visible...")
+
+            # Si no hay token, intentar variante visible
+            if not token:
+                try:
+                    print(f"[Captcha] Solicitando token a resolver_captcha_v2 (variant=proxyless_visible) — intento {attempt}")
+                    token = await resolver_captcha_v2(page.url, sitekey, task_variant="proxyless_visible")
+                except Exception as e:
+                    print(f"[Captcha] Error al llamar resolver_captcha_v2 (visible): {e}")
+                    token = None
+
+                if token:
+                    print(f"[Captcha] Token recibido (visible) en intento {attempt}")
+                else:
+                    print(f"[Captcha] No se obtuvo token con variante visible en intento {attempt}")
+
+            if not token:
+                # esperar y reintentar
+                await asyncio.sleep(1.0 + random.random() * 0.6)
+                continue
+
+            # Inyectar token y disparar eventos robustos
+            try:
+                await page.evaluate(
+                    """
+                    (token) => {
+                        const form = document.querySelector('#aspnetForm') || document.querySelector('form');
+                        if (!form) return;
+                        const ensure = (id) => {
+                            let t = form.querySelector('#'+id) || form.querySelector('textarea[name="'+id+'"]');
+                            if (!t) {
+                                t = document.createElement('textarea');
+                                t.id = id; t.name = id; t.style.display = 'none';
+                                form.appendChild(t);
+                            }
+                            t.value = token;
+                            t.dispatchEvent(new Event('input', {bubbles:true}));
+                            t.dispatchEvent(new Event('change', {bubbles:true}));
+                        };
+                        ensure('g-recaptcha-response');
+                        ensure('g-recaptcha-response-100000');
+                        // algunos sitios esperan que se llame a grecaptcha callback si existe
+                        try {
+                            if (window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
+                                // dispatch custom event por si el front escucha
+                                document.dispatchEvent(new Event('g-recaptcha-response-changed'));
+                            }
+                        } catch(e) {}
+                    }
+                    """,
+                    token
+                )
+            except Exception as e:
+                print(f"[Captcha] Error inyectando token: {e}")
+
+            # Interacción humana mínima y espera para que el backend registre el token
+            try:
+                await page.mouse.move(100, 100)
+                await asyncio.sleep(0.3)
+                await page.mouse.move(200, 200, steps=5)
+            except Exception:
+                pass
+            await asyncio.sleep(1.2 + random.random() * 0.8)
+
+            # Verificar que el token quedó inyectado
+            try:
+                injected = await page.evaluate("""
+                    () => {
+                        const t = document.querySelector('#g-recaptcha-response') || document.querySelector('textarea[name=\"g-recaptcha-response\"]');
+                        return !!(t && t.value && t.value.length > 10);
+                    }
+                """)
+            except Exception as e:
+                print(f"[Captcha] Error verificando token inyectado: {e}")
+                injected = False
+
+            if injected:
+                print(f"[Captcha] Token inyectado correctamente en intento {attempt}")
+                return token
+            else:
+                print(f"[Captcha] Token no se inyectó correctamente en intento {attempt}, reintentando...")
+        except Exception as e:
+            print(f"[Captcha] Error en intento {attempt}: {e}")
+        await asyncio.sleep(1.0)
+    return None
 
 
 async def _wait_result_or_alert(page, timeout_ms=20000):
     loop = asyncio.get_running_loop()
     end = loop.time() + (timeout_ms / 1000)
     while loop.time() < end:
-        # alerta informativa
         try:
             wrap = page.locator(SEL_ALERT_WRAP)
             if await wrap.count() > 0 and await wrap.first.is_visible():
@@ -121,7 +201,6 @@ async def _wait_result_or_alert(page, timeout_ms=20000):
         except Exception:
             pass
 
-        # tablas de resultado
         try:
             tables = page.locator("table[id*='gv'], table[id*='Grid'], .table")
             if await tables.count() > 0:
@@ -158,7 +237,6 @@ async def _submit_form_robust(page):
     """
     Intenta enviar el formulario de varias formas: click en botón, form.submit(), dispatchEvent('submit').
     """
-    # 1) click en botón si existe
     try:
         if await page.locator(SEL_BTN_CONSULTAR).count() > 0:
             await page.locator(SEL_BTN_CONSULTAR).first.scroll_into_view_if_needed()
@@ -167,7 +245,6 @@ async def _submit_form_robust(page):
     except Exception:
         pass
 
-    # 2) intentar dispatch submit sobre el form
     try:
         await page.evaluate("""
             () => {
@@ -182,7 +259,6 @@ async def _submit_form_robust(page):
     except Exception:
         pass
 
-    # 3) fallback: pulsar Enter en el campo número
     try:
         await page.keyboard.press("Enter")
         return True
@@ -240,23 +316,34 @@ async def consultar_tyba(consulta_id: int, tipo_doc: str, numero: str):
                 await page.select_option(SEL_TIPO_DOC, value=tipo_doc_val)
             except Exception:
                 try:
-                    await page.evaluate("(sel, v) => { const s = document.querySelector(sel); if (s) s.value = v; }", SEL_TIPO_DOC, tipo_doc_val)
+                    await page.evaluate(
+                        "(sel, v) => { const s = document.querySelector(sel); if (s) s.value = v; }",
+                        SEL_TIPO_DOC, tipo_doc_val
+                    )
                 except Exception:
                     pass
 
             try:
-                await page.fill(SEL_NUMERO, str(numero))
+                input_loc = page.locator(SEL_NUMERO).first
+                await input_loc.wait_for(state="visible", timeout=8000)
+                await input_loc.click()
+                await input_loc.fill("")
+                await input_loc.type(str(numero), delay=25)
             except Exception:
                 try:
-                    await page.evaluate("(sel, v) => { const el = document.querySelector(sel); if (el) { el.value = v; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); } }", SEL_NUMERO, str(numero))
+                    await page.evaluate(
+                        "(sel, v) => { const el = document.querySelector(sel); if (el) { el.value = v; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); } }",
+                        SEL_NUMERO, str(numero)
+                    )
                 except Exception:
                     pass
 
-            # Intentar resolver reCAPTCHA invisible y enviar; si el sitio responde "captcha inválido" reintentar 1 vez
-            max_solve_attempts = 2
+            # Intentar resolver reCAPTCHA invisible y enviar; ahora con al menos 2 intentos internos
+            max_solve_attempts = 3
             solved_and_submitted = False
             for solve_try in range(1, max_solve_attempts + 1):
-                token = await _solve_recaptcha_invisible(page)
+                # aquí pedimos al menos 2 intentos internos para la detección/solución del captcha
+                token = await _solve_recaptcha_invisible(page, max_attempts=2)
                 # si no hay recaptcha, token puede ser None pero igual intentamos enviar
                 # espera humana corta antes de enviar
                 await asyncio.sleep(0.6 + random.random() * 0.8)
@@ -265,7 +352,6 @@ async def consultar_tyba(consulta_id: int, tipo_doc: str, numero: str):
                 if not submitted:
                     # guardar diagnóstico y abortar este intento
                     html = await page.content()
-                    # intentar guardar html en la carpeta de resultados
                     try:
                         relative_folder = os.path.join('resultados', str(consulta_id))
                         absolute_folder = os.path.join(settings.MEDIA_ROOT, relative_folder)
@@ -274,7 +360,6 @@ async def consultar_tyba(consulta_id: int, tipo_doc: str, numero: str):
                             fh.write(html)
                     except Exception:
                         pass
-                    # intentar siguiente solve (si aplica) o salir
                     continue
 
                 # esperar respuesta corta
@@ -288,7 +373,6 @@ async def consultar_tyba(consulta_id: int, tipo_doc: str, numero: str):
                         joined = " ".join(t.lower() for t in texts)
                         if "captcha" in joined or "no es válido" in joined or "no válido" in joined:
                             captcha_rejected = True
-                            # cerrar popup si hay botón aceptar
                             try:
                                 if await page.locator(".swal2-confirm").count() > 0:
                                     await page.locator(".swal2-confirm").first.click()
@@ -301,7 +385,6 @@ async def consultar_tyba(consulta_id: int, tipo_doc: str, numero: str):
                                 txt = (await page.locator(SEL_ALERT_TEXT).first.inner_text() or "").lower()
                                 if "captcha" in txt or "no es válido" in txt or "no válido" in txt:
                                     captcha_rejected = True
-                                # si es otro aviso, lo procesaremos luego
                         except Exception:
                             pass
                 except Exception:
@@ -310,16 +393,12 @@ async def consultar_tyba(consulta_id: int, tipo_doc: str, numero: str):
                 if captcha_rejected and solve_try < max_solve_attempts:
                     # refrescar la página parcialmente: forzar recarga del iframe captcha o recargar la página
                     try:
-                        # intentar recargar solo la imagen del captcha si existe
                         await page.evaluate("""
                             () => {
                                 const iframe = document.querySelector("iframe[src*='recaptcha']");
                                 if (iframe) {
                                     const src = iframe.getAttribute('src') || '';
                                     iframe.setAttribute('src', src.split('?')[0] + '?_=' + Date.now());
-                                } else {
-                                    // fallback: recargar la página completa
-                                    // location.reload();
                                 }
                             }
                         """)
